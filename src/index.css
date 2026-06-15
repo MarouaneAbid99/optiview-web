@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --color-optiblue: #1e40af;
+  --color-optigray: #f3f4f6;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f9fafb;
+  color: #1f2937;
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  text-align: left;
+  border: none;
+}
+
+/* Hotspot overlay styles */
+.hotspot {
+  position: absolute;
+  cursor: pointer;
+  border: 2px solid rgba(30, 64, 175, 0.3);
+  background: rgba(30, 64, 175, 0.05);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.hotspot:hover {
+  background: rgba(30, 64, 175, 0.15);
+  border-color: rgba(30, 64, 175, 0.6);
+}
+
+.hotspot.active {
+  background: rgba(30, 64, 175, 0.25);
+  border-color: #1e40af;
+}
+
+.hotspot-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e40af;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 2px 8px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.hotspot:hover .hotspot-label,
+.hotspot.active .hotspot-label {
+  opacity: 1;
+}
+
+/* Pannellum overrides */
+.pnlm-container {
+  width: 100% !important;
+  height: 100% !important;
+}
