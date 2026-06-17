@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Save, Image as ImageIcon } from 'lucide-react';
+import { ChevronLeft, Save, Image as ImageIcon, Upload } from 'lucide-react';
 import { panoramaAPI } from '../api/client';
+import { uploadImageToCloudinary } from '../api/cloudinary';
 import { HotspotDrawCanvas } from '../components/editor/HotspotDrawCanvas';
 import { HotspotEditPanel } from '../components/editor/HotspotEditPanel';
 
@@ -14,6 +15,7 @@ export function EditorPage() {
   const [selectedHotspot, setSelectedHotspot] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
 
@@ -81,6 +83,28 @@ export function EditorPage() {
     } catch (e) {
       const msg = e?.response?.data?.message;
       alert(Array.isArray(msg) ? msg.join(', ') : (msg || 'Failed to update image URL'));
+    }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+    try {
+      setUploading(true);
+      const url = await uploadImageToCloudinary(file);
+      await panoramaAPI.updateStore(store.id, { imageUrl: url });
+      setStore((prev) => ({ ...prev, imageUrl: url }));
+      setImageUrlInput(url);
+      flash('Image uploaded and saved');
+    } catch (err) {
+      alert(err.message || 'Upload failed');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -177,7 +201,7 @@ export function EditorPage() {
         </div>
 
         {/* Image URL bar */}
-        <div style={{ padding: '8px 20px', background: '#f9fafb', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ padding: '8px 20px', background: '#f9fafb', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <ImageIcon size={14} color="#9ca3af" style={{ flexShrink: 0 }} />
           <input
             type="text"
@@ -185,14 +209,24 @@ export function EditorPage() {
             onChange={(e) => setImageUrlInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSaveImageUrl()}
             placeholder="Panorama image URL"
-            style={{ flex: 1, padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, outline: 'none', color: '#374151' }}
+            style={{ flex: 1, minWidth: 140, padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 12, outline: 'none', color: '#374151' }}
           />
           <button
             onClick={handleSaveImageUrl}
             style={{ padding: '6px 14px', background: '#e5e7eb', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600, color: '#374151', cursor: 'pointer', whiteSpace: 'nowrap' }}
           >
-            Update Image
+            Update URL
           </button>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px',
+            background: uploading ? '#93c5fd' : '#1e40af', color: '#fff',
+            borderRadius: 6, fontSize: 12, fontWeight: 600,
+            cursor: uploading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+          }}>
+            <Upload size={13} />
+            {uploading ? 'Uploading…' : 'Upload Image'}
+            <input type="file" accept="image/*" onChange={handleFileUpload} disabled={uploading} style={{ display: 'none' }} />
+          </label>
         </div>
       </div>
 

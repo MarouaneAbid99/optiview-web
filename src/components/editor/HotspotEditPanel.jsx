@@ -1,10 +1,11 @@
 import { Trash2, MapPin, MousePointer } from 'lucide-react';
 
 const MODULES = [
-  { value: 'clients', label: 'Clients',  dot: '#22c55e' },
-  { value: 'eyewear', label: 'Eyewear',  dot: '#3b82f6' },
-  { value: 'lenses',  label: 'Lenses',   dot: '#a855f7' },
-  { value: 'atelier', label: 'Atelier',  dot: '#f97316' },
+  { value: 'clients', label: 'Clients',           dot: '#22c55e' },
+  { value: 'eyewear', label: 'Eyewear',           dot: '#3b82f6' },
+  { value: 'lenses',  label: 'Lenses',            dot: '#a855f7' },
+  { value: 'atelier', label: 'Atelier',           dot: '#f97316' },
+  { value: 'desk',    label: 'Desk (Dashboard)',  dot: '#ec4899' },
 ];
 
 const inputStyle = { width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 7, fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#111827', background: '#fff' };

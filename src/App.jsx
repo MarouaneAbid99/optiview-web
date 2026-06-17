@@ -9,6 +9,7 @@ import { ClientsPage } from './pages/ClientsPage';
 import { EyewearPage } from './pages/EyewearPage';
 import { LensesPage } from './pages/LensesPage';
 import { AtelierPage } from './pages/AtelierPage';
+import { DeskPage } from './pages/DeskPage';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/module/eyewear" element={<ProtectedRoute><EyewearPage /></ProtectedRoute>} />
           <Route path="/module/lenses" element={<ProtectedRoute><LensesPage /></ProtectedRoute>} />
           <Route path="/module/atelier" element={<ProtectedRoute><AtelierPage /></ProtectedRoute>} />
+          <Route path="/module/desk" element={<ProtectedRoute><DeskPage /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
