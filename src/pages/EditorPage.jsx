@@ -240,6 +240,7 @@ export function EditorPage() {
             selectedHotspot={selectedHotspot}
             onDrawComplete={handleDrawComplete}
             onSelectHotspot={setSelectedHotspot}
+            onUpdateHotspot={handleUpdate}
           />
         </div>
 

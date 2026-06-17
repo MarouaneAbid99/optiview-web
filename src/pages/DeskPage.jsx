@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ModuleLayout } from '../components/ModuleLayout';
+import { OrderModal } from '../components/atelier/OrderModal';
 import { clientsAPI, eyewearAPI, lensesAPI, atelierAPI } from '../api/client';
-import { Users, Glasses, Eye, Wrench, AlertCircle, TrendingUp, Package } from 'lucide-react';
+import { Users, Glasses, Eye, Wrench, AlertCircle, TrendingUp, Package, Plus } from 'lucide-react';
 
 const card = {
   background: '#fff',
@@ -21,12 +22,24 @@ const STATUS_COLORS = {
 export function DeskPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [showOrderModal, setShowOrderModal] = useState(false);
   const [data, setData] = useState({
     clients: null, eyewear: null, lenses: null, orders: null,
     lowFrames: [], lowLenses: [], kanban: null,
   });
 
   useEffect(() => { loadAll(); }, []);
+
+  const handleCreateOrder = async (data) => {
+    try {
+      await atelierAPI.createOrder(data);
+      setShowOrderModal(false);
+      await loadAll();
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to create order';
+      alert(Array.isArray(msg) ? msg.join(', ') : msg);
+    }
+  };
 
   const loadAll = async () => {
     try {
@@ -121,6 +134,16 @@ export function DeskPage() {
 
   return (
     <ModuleLayout title="Desk — Dashboard">
+      {/* New Order button */}
+      <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          onClick={() => setShowOrderModal(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 18px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+        >
+          <Plus size={15} /> New Order
+        </button>
+      </div>
+
       {/* Key metrics */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
         {metrics.map(({ icon: Icon, label, color, value, sub, path }) => (
@@ -227,6 +250,10 @@ export function DeskPage() {
           </button>
         ))}
       </div>
+
+      {showOrderModal && (
+        <OrderModal onSave={handleCreateOrder} onClose={() => setShowOrderModal(false)} />
+      )}
     </ModuleLayout>
   );
 }

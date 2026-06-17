@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 import { panoramaAPI } from '../api/client';
@@ -24,10 +24,22 @@ const MODULE_BORDERS = {
 
 export function PanoramaViewer({ storeId }) {
   const imgRef = useRef(null);
+  const containerRef = useRef(null);
   const [imgSize, setImgSize] = useState({ width: 0, height: 0 });
   const [store, setStore] = useState(null);
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Zoom + pan state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const isPanning = useRef(false);
+  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  // Track pointer-down position to distinguish click from drag
+  const pointerDownPos = useRef({ x: 0, y: 0 });
+  // Pinch-zoom tracking
+  const lastPinchDist = useRef(null);
+
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
@@ -59,6 +71,78 @@ export function PanoramaViewer({ storeId }) {
       window.removeEventListener('resize', updateSize);
     };
   }, [store?.imageUrl]);
+
+  // Wheel zoom
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const delta = -e.deltaY * 0.001;
+    setZoom((z) => Math.min(5, Math.max(1, z + delta * z)));
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
+
+  const startPan = (clientX, clientY) => {
+    isPanning.current = true;
+    pointerDownPos.current = { x: clientX, y: clientY };
+    panStart.current = { x: clientX, y: clientY, panX: pan.x, panY: pan.y };
+  };
+
+  const movePan = (clientX, clientY) => {
+    if (!isPanning.current) return;
+    setPan({
+      x: panStart.current.panX + (clientX - panStart.current.x),
+      y: panStart.current.panY + (clientY - panStart.current.y),
+    });
+  };
+
+  const endPan = () => { isPanning.current = false; };
+
+  // Did the pointer move enough to count as a drag?
+  const isDrag = (clientX, clientY) => {
+    const dx = clientX - pointerDownPos.current.x;
+    const dy = clientY - pointerDownPos.current.y;
+    return Math.sqrt(dx * dx + dy * dy) > 5;
+  };
+
+  const pinchDist = (touches) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      lastPinchDist.current = pinchDist(e.touches);
+    } else {
+      startPan(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+      const dist = pinchDist(e.touches);
+      if (lastPinchDist.current) {
+        const ratio = dist / lastPinchDist.current;
+        setZoom((z) => Math.min(5, Math.max(1, z * ratio)));
+      }
+      lastPinchDist.current = dist;
+    } else {
+      movePan(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    lastPinchDist.current = null;
+    endPan();
+  };
+
+  const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
   if (loading) {
     return (
@@ -92,108 +176,132 @@ export function PanoramaViewer({ storeId }) {
               </div>
             )}
             {user?.role === 'OPTICIAN' && (
-              <button
-                onClick={() => navigate('/employees')}
-                style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
-              >
+              <button onClick={() => navigate('/employees')}
+                style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 Employees
               </button>
             )}
             {user?.role === 'DEVELOPER' && (
-              <button
-                onClick={() => navigate('/admin')}
-                style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
-              >
+              <button onClick={() => navigate('/admin')}
+                style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                 Admin
               </button>
             )}
-            <button
-              onClick={() => navigate('/editor')}
-              style={{ padding: '7px 14px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >
+            <button onClick={() => navigate('/editor')}
+              style={{ padding: '7px 14px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               Edit Hotspots
             </button>
-            <button
-              onClick={logout}
-              title="Logout"
+            <button onClick={logout} title="Logout"
               style={{ padding: 7, background: 'transparent', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#6b7280', flexShrink: 0 }}
               onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fca5a5'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.color = '#6b7280'; e.currentTarget.style.borderColor = '#e5e7eb'; }}
-            >
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#6b7280'; e.currentTarget.style.borderColor = '#e5e7eb'; }}>
               <LogOut size={18} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Image area */}
-      <div style={{ flex: 1, overflow: 'auto', background: '#111827', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      {/* Image area — zoom + pan container */}
+      <div
+        ref={containerRef}
+        style={{ flex: 1, overflow: 'hidden', background: '#111827', position: 'relative', cursor: isPanning.current ? 'grabbing' : 'grab', touchAction: 'none' }}
+        onMouseDown={(e) => { if (e.button === 0) startPan(e.clientX, e.clientY); }}
+        onMouseMove={(e) => movePan(e.clientX, e.clientY)}
+        onMouseUp={(e) => endPan()}
+        onMouseLeave={() => endPan()}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         {store?.imageUrl ? (
-          <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}>
-            <img
-              ref={imgRef}
-              src={store.imageUrl}
-              alt={store.name}
-              draggable={false}
-              style={{ maxWidth: '100%', height: 'auto', display: 'block', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
-            />
+          <>
+            {/* Transformed layer */}
+            <div style={{
+              position: 'absolute', top: '50%', left: '50%',
+              transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              transformOrigin: 'center center',
+              willChange: 'transform',
+            }}>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <img
+                  ref={imgRef}
+                  src={store.imageUrl}
+                  alt={store.name}
+                  draggable={false}
+                  style={{ maxWidth: '80vw', maxHeight: '80vh', height: 'auto', display: 'block', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', userSelect: 'none' }}
+                />
 
-            {imgSize.width > 0 && hotspots.map((h) => {
-              const left   = h.x * imgSize.width;
-              const top    = h.y * imgSize.height;
-              const width  = h.w * imgSize.width;
-              const height = h.h * imgSize.height;
-              const color  = MODULE_BORDERS[h.module] || MODULE_BORDERS[''];
+                {imgSize.width > 0 && hotspots.map((h) => {
+                  const left   = h.x * imgSize.width;
+                  const top    = h.y * imgSize.height;
+                  const width  = h.w * imgSize.width;
+                  const height = h.h * imgSize.height;
+                  const color  = MODULE_BORDERS[h.module] || MODULE_BORDERS[''];
 
-              return (
-                <button
-                  key={h.id}
-                  onClick={() => navigate(`/module/${h.module}`)}
-                  title={h.label}
-                  style={{
-                    position: 'absolute', left, top, width, height, boxSizing: 'border-box',
-                    background: MODULE_COLORS[h.module] || MODULE_COLORS[''],
-                    border: `2px solid ${color}`,
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'background 0.15s, transform 0.1s',
-                    padding: 0,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = MODULE_COLORS[h.module]?.replace('0.20', '0.40') || 'rgba(156,163,175,0.40)';
-                    e.currentTarget.style.transform = 'scale(1.01)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = MODULE_COLORS[h.module] || MODULE_COLORS[''];
-                    e.currentTarget.style.transform = 'scale(1)';
-                  }}
-                >
-                  <span style={{
-                    fontSize: Math.max(10, Math.min(15, width / 7)),
-                    fontWeight: 700, color,
-                    textShadow: '0 1px 3px rgba(0,0,0,0.4)',
-                    pointerEvents: 'none',
-                    maxWidth: '90%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                    padding: '2px 6px',
-                    background: 'rgba(255,255,255,0.75)',
-                    borderRadius: 3,
-                  }}>
-                    {h.label}
-                  </span>
+                  return (
+                    <button
+                      key={h.id}
+                      title={h.label}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!isDrag(e.clientX, e.clientY)) navigate(`/module/${h.module}`);
+                      }}
+                      style={{
+                        position: 'absolute', left, top, width, height, boxSizing: 'border-box',
+                        background: MODULE_COLORS[h.module] || MODULE_COLORS[''],
+                        border: `2px solid ${color}`,
+                        borderRadius: 4, cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'background 0.15s', padding: 0,
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = (MODULE_COLORS[h.module] || 'rgba(156,163,175,0.20)').replace('0.20', '0.40'); }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = MODULE_COLORS[h.module] || MODULE_COLORS['']; }}
+                    >
+                      <span style={{
+                        fontSize: Math.max(10, Math.min(15, width / 7)),
+                        fontWeight: 700, color,
+                        textShadow: '0 1px 3px rgba(0,0,0,0.4)',
+                        pointerEvents: 'none',
+                        maxWidth: '90%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
+                        padding: '2px 6px', background: 'rgba(255,255,255,0.75)', borderRadius: 3,
+                      }}>
+                        {h.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Zoom controls */}
+            <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', flexDirection: 'column', gap: 6, zIndex: 10 }}>
+              {[
+                { label: '+', action: () => setZoom((z) => Math.min(5, parseFloat((z + 0.3).toFixed(2)))) },
+                { label: '−', action: () => setZoom((z) => Math.max(1, parseFloat((z - 0.3).toFixed(2)))) },
+                { label: '↺',  action: resetView },
+              ].map(({ label, action }) => (
+                <button key={label} onClick={action}
+                  style={{ width: 38, height: 38, background: 'rgba(255,255,255,0.92)', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', fontSize: label === '↺' ? 16 : 20, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }}>
+                  {label}
                 </button>
-              );
-            })}
-          </div>
+              ))}
+              {zoom !== 1 && (
+                <div style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', borderRadius: 6, padding: '2px 6px', fontSize: 11, textAlign: 'center' }}>
+                  {Math.round(zoom * 100)}%
+                </div>
+              )}
+            </div>
+          </>
         ) : (
-          <div style={{ textAlign: 'center', color: '#6b7280' }}>
-            <p style={{ fontSize: 15, marginBottom: 8 }}>No image set for this store.</p>
-            <button
-              onClick={() => navigate('/editor')}
-              style={{ padding: '8px 20px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, cursor: 'pointer' }}
-            >
-              Open Editor to add an image
-            </button>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ textAlign: 'center', color: '#6b7280' }}>
+              <p style={{ fontSize: 15, marginBottom: 8 }}>No image set for this store.</p>
+              <button onClick={() => navigate('/editor')}
+                style={{ padding: '8px 20px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, cursor: 'pointer' }}>
+                Open Editor to add an image
+              </button>
+            </div>
           </div>
         )}
       </div>

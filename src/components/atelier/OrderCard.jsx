@@ -1,21 +1,33 @@
-import { ChevronRight, ChevronLeft, Trash2, User, Tag } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Trash2, User, Tag, Wrench } from 'lucide-react';
 
 const STATUS_LABELS = { 'in-progress': 'In Progress', ready: 'Ready', delivered: 'Deliver', pending: 'Pending' };
+
+const TYPE_BADGE = {
+  sale_montage: { label: 'Sale+Mtg', bg: '#eff6ff', color: '#1e40af' },
+  montage:      { label: 'Montage',  bg: '#fdf4ff', color: '#7e22ce' },
+  sale:         { label: 'Sale',     bg: '#f0fdf4', color: '#15803d' },
+};
 
 export function OrderCard({ order, nextStatus, prevStatus, onStatusChange, onDelete }) {
   const clientName = order.client
     ? `${order.client.firstName} ${order.client.lastName}`
     : 'Walk-in';
 
-  const lensUnits = order.items.reduce((sum, i) => sum + i.quantity, 0);
+  const lensUnits = order.items?.reduce((sum, i) => sum + i.quantity, 0) ?? 0;
+  const badge = TYPE_BADGE[order.orderType] || TYPE_BADGE.sale_montage;
 
   return (
     <div style={{ background: '#fff', borderRadius: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', padding: 14, border: '1px solid #f3f4f6' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#1e40af', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>
-          {order.orderNumber}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#1e40af', background: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>
+            {order.orderNumber}
+          </span>
+          <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: badge.bg, color: badge.color }}>
+            {badge.label}
+          </span>
+        </div>
         <button onClick={() => onDelete(order.id)} title="Delete order"
           style={{ padding: 3, background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
           <Trash2 size={13} color="#d1d5db" />
@@ -28,24 +40,43 @@ export function OrderCard({ order, nextStatus, prevStatus, onStatusChange, onDel
         <span style={{ fontSize: 13, fontWeight: 600, color: '#111827' }}>{clientName}</span>
       </div>
 
-      {/* Frame */}
-      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
-        {order.frame.brand} {order.frame.model}
-        {order.frame.color ? ` · ${order.frame.color}` : ''}
-      </div>
+      {/* Frame (optional) */}
+      {order.frame ? (
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+          {order.frame.brand} {order.frame.model}
+          {order.frame.color ? ` · ${order.frame.color}` : ''}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4, fontStyle: 'italic' }}>
+          Client's own frame
+        </div>
+      )}
 
       {/* Lenses summary */}
-      <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>
-        {order.items.length} lens type{order.items.length !== 1 ? 's' : ''} · {lensUnits} unit{lensUnits !== 1 ? 's' : ''}
-      </div>
+      {lensUnits > 0 ? (
+        <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8 }}>
+          {order.items.length} lens type{order.items.length !== 1 ? 's' : ''} · {lensUnits} unit{lensUnits !== 1 ? 's' : ''}
+        </div>
+      ) : (
+        <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <Wrench size={11} /> Labor only
+        </div>
+      )}
 
       {/* Price */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: order.laborPrice ? 4 : 8 }}>
         <Tag size={12} color="#7c3aed" />
         <span style={{ fontWeight: 700, fontSize: 14, color: '#7c3aed' }}>
           {order.totalPrice.toLocaleString()} MAD
         </span>
       </div>
+
+      {/* Labor price breakdown */}
+      {order.laborPrice != null && (
+        <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>
+          Labor: {order.laborPrice.toLocaleString()} MAD
+        </div>
+      )}
 
       {/* Delivery date */}
       {order.deliveryDate && (
