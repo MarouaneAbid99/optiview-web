@@ -1,8 +1,10 @@
 import { Trash2, Edit2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '../../hooks/useIsMobile';
 
 export function ClientsTable({ clients, onEdit, onDelete }) {
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   if (clients.length === 0) {
     return (
@@ -20,7 +22,14 @@ export function ClientsTable({ clients, onEdit, onDelete }) {
           <div key={c.id} style={{ background: '#fff', borderRadius: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', padding: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
               <div>
-                <p style={{ fontWeight: 700, fontSize: 15, color: '#111827' }}>{c.firstName} {c.lastName}</p>
+                <button
+                  onClick={() => navigate(`/module/clients/${c.id}`)}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontWeight: 700, fontSize: 15, color: '#1e40af', textAlign: 'left', textDecoration: 'underline', textDecorationColor: 'transparent' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.textDecorationColor = '#1e40af'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.textDecorationColor = 'transparent'; }}
+                >
+                  {c.firstName} {c.lastName}
+                </button>
                 {c.email && <p style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{c.email}</p>}
                 {c.phone && <p style={{ fontSize: 13, color: '#6b7280' }}>{c.phone}</p>}
                 {c.address && <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{c.address}</p>}
@@ -69,7 +78,14 @@ export function ClientsTable({ clients, onEdit, onDelete }) {
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
               <td style={{ padding: '14px 20px' }}>
-                <div style={{ fontWeight: 600, color: '#111827', fontSize: 14 }}>{c.firstName} {c.lastName}</div>
+                <button
+                  onClick={() => navigate(`/module/clients/${c.id}`)}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontWeight: 600, color: '#1e40af', fontSize: 14, textAlign: 'left', textDecoration: 'underline', textDecorationColor: 'transparent' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.textDecorationColor = '#1e40af'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.textDecorationColor = 'transparent'; }}
+                >
+                  {c.firstName} {c.lastName}
+                </button>
                 {c.address && <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{c.address}</div>}
               </td>
               <td style={{ padding: '14px 20px', fontSize: 13, color: '#6b7280' }}>{c.email || '—'}</td>

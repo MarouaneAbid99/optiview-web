@@ -13,6 +13,7 @@ import { DeskPage } from './pages/DeskPage';
 import { EmployeesPage } from './pages/EmployeesPage';
 import { AdminPage } from './pages/AdminPage';
 import { OrdersPage } from './pages/OrdersPage';
+import { ClientProfilePage } from './pages/ClientProfilePage';
 
 function App() {
   return (
@@ -25,6 +26,7 @@ function App() {
           <Route path="/" element={<ProtectedRoute><PanoramaPage /></ProtectedRoute>} />
           <Route path="/editor" element={<ProtectedRoute><EditorPage /></ProtectedRoute>} />
           <Route path="/module/clients" element={<ProtectedRoute><ClientsPage /></ProtectedRoute>} />
+          <Route path="/module/clients/:id" element={<ProtectedRoute><ClientProfilePage /></ProtectedRoute>} />
           <Route path="/module/eyewear" element={<ProtectedRoute><EyewearPage /></ProtectedRoute>} />
           <Route path="/module/lenses" element={<ProtectedRoute><LensesPage /></ProtectedRoute>} />
           <Route path="/module/atelier" element={<ProtectedRoute><AtelierPage /></ProtectedRoute>} />
