@@ -37,14 +37,18 @@ export function PanoramaViewer({ storeId, store: initialStore }) {
   }, [storeId, initialStore]);
 
   useEffect(() => {
-    if (!store || !panoramaRef.current) return;
+    if (!store?.imageUrl || !panoramaRef.current) return;
+
+    let cancelled = false;
 
     import('pannellum').then((pannellum) => {
+      if (cancelled) return;
       const lib = pannellum.default || pannellum;
       if (typeof lib.viewer !== 'function') return;
 
       if (viewerRef.current) {
         try { viewerRef.current.destroy(); } catch {}
+        viewerRef.current = null;
       }
 
       viewerRef.current = lib.viewer(panoramaRef.current, {
@@ -59,12 +63,13 @@ export function PanoramaViewer({ storeId, store: initialStore }) {
     });
 
     return () => {
+      cancelled = true;
       if (viewerRef.current) {
         try { viewerRef.current.destroy(); } catch {}
         viewerRef.current = null;
       }
     };
-  }, [store]);
+  }, [store?.imageUrl]);
 
   const handleHotspotClick = (module) => {
     navigate(`/module/${module}`);

@@ -5,6 +5,8 @@ import { panoramaAPI } from '../api/client';
 import { HotspotDrawCanvas } from '../components/editor/HotspotDrawCanvas';
 import { HotspotEditPanel } from '../components/editor/HotspotEditPanel';
 
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1574619988379-b1e65e7d4204?w=4096&h=2048&fit=crop';
+
 export function EditorPage() {
   const navigate = useNavigate();
   const [store, setStore] = useState(null);
@@ -19,14 +21,23 @@ export function EditorPage() {
     try {
       setLoading(true);
       const res = await panoramaAPI.getStores();
+      let storeData;
       if (res.data.length > 0) {
         const full = await panoramaAPI.getStore(res.data[0].id);
-        setStore(full.data);
-        setHotspots(full.data.hotspots || []);
-        setImageUrlInput(full.data.imageUrl);
+        storeData = full.data;
+      } else {
+        const created = await panoramaAPI.createStore({
+          name: 'My Optical Shop',
+          imageUrl: FALLBACK_IMAGE,
+        });
+        storeData = { ...created.data, hotspots: [] };
       }
+      setStore(storeData);
+      setHotspots(storeData.hotspots || []);
+      setImageUrlInput(storeData.imageUrl);
     } catch (e) {
-      console.error('Failed to load store:', e);
+      const msg = e?.response?.data?.message;
+      alert(Array.isArray(msg) ? msg.join(', ') : (msg || 'Failed to load store'));
     } finally {
       setLoading(false);
     }
@@ -68,7 +79,8 @@ export function EditorPage() {
       setStore((prev) => ({ ...prev, imageUrl: imageUrlInput.trim() }));
       flash('Image URL updated');
     } catch (e) {
-      console.error('Failed to update image URL:', e);
+      const msg = e?.response?.data?.message;
+      alert(Array.isArray(msg) ? msg.join(', ') : (msg || 'Failed to update image URL'));
     }
   };
 
