@@ -4,10 +4,43 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const client = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
 });
+
+const TOKEN_KEY = 'optiview_token';
+
+export const tokenStore = {
+  get: () => localStorage.getItem(TOKEN_KEY),
+  set: (token) => localStorage.setItem(TOKEN_KEY, token),
+  clear: () => localStorage.removeItem(TOKEN_KEY),
+};
+
+client.interceptors.request.use((config) => {
+  const token = tokenStore.get();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+client.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      tokenStore.clear();
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  },
+);
+
+export const authAPI = {
+  register: (data) => client.post('/auth/register', data),
+  login: (data) => client.post('/auth/login', data),
+  me: () => client.get('/auth/me'),
+};
 
 export const panoramaAPI = {
   getStores: () => client.get('/panorama/stores'),

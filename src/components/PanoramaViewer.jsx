@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { LogOut } from 'lucide-react';
 import { HotspotLayer } from './HotspotLayer';
 import { panoramaAPI } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 export function PanoramaViewer({ storeId, store: initialStore }) {
   const panoramaRef = useRef(null);
@@ -10,6 +12,7 @@ export function PanoramaViewer({ storeId, store: initialStore }) {
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(!initialStore);
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     if (initialStore) {
@@ -36,12 +39,10 @@ export function PanoramaViewer({ storeId, store: initialStore }) {
   useEffect(() => {
     if (!store || !panoramaRef.current) return;
 
-    // Dynamically import pannellum to avoid SSR issues
     import('pannellum').then((pannellum) => {
       const lib = pannellum.default || pannellum;
       if (typeof lib.viewer !== 'function') return;
 
-      // Destroy previous viewer if any
       if (viewerRef.current) {
         try { viewerRef.current.destroy(); } catch {}
       }
@@ -84,21 +85,44 @@ export function PanoramaViewer({ storeId, store: initialStore }) {
     );
   }
 
+  const shopLabel = user?.shop?.name || (user?.role === 'DEVELOPER' ? 'Developer' : '');
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh' }}>
       {/* Header */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', flexShrink: 0 }}>
-        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '12px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e40af', letterSpacing: '-0.3px' }}>OPTIVIEW</h1>
             {store && <p style={{ fontSize: 13, color: '#6b7280', marginTop: 1 }}>{store.name}</p>}
           </div>
-          <button
-            onClick={() => navigate('/editor')}
-            style={{ padding: '7px 14px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
-          >
-            <span style={{ display: window.innerWidth < 480 ? 'none' : 'inline' }}>Edit </span>Hotspots
-          </button>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            {/* User info — hidden on very small screens */}
+            {user && (
+              <div style={{ textAlign: 'right', display: window.innerWidth < 480 ? 'none' : 'block' }}>
+                <p style={{ fontSize: 13, fontWeight: 500, color: '#111827', whiteSpace: 'nowrap' }}>{user.name}</p>
+                {shopLabel && <p style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{shopLabel}</p>}
+              </div>
+            )}
+
+            <button
+              onClick={() => navigate('/editor')}
+              style={{ padding: '7px 14px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
+            >
+              <span style={{ display: window.innerWidth < 480 ? 'none' : 'inline' }}>Edit </span>Hotspots
+            </button>
+
+            <button
+              onClick={logout}
+              title="Logout"
+              style={{ padding: 7, background: 'transparent', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#6b7280', flexShrink: 0 }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626'; e.currentTarget.style.borderColor = '#fca5a5'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = '#6b7280'; e.currentTarget.style.borderColor = '#e5e7eb'; }}
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
         </div>
       </div>
 
