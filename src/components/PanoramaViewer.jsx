@@ -22,6 +22,8 @@ const MODULE_BORDERS = {
   '':      '#9ca3af',
 };
 
+const DRAG_THRESHOLD = 6;
+
 export function PanoramaViewer({ storeId }) {
   const imgRef = useRef(null);
   const containerRef = useRef(null);
@@ -30,53 +32,53 @@ export function PanoramaViewer({ storeId }) {
   const [hotspots, setHotspots] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Zoom + pan state
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const isPanning = useRef(false);
-  const panStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
-  // Track pointer-down position to distinguish click from drag
-  const pointerDownPos = useRef({ x: 0, y: 0 });
-  // Pinch-zoom tracking
+  const [isPanning, setIsPanning] = useState(false);
+
+  // Single ref tracks all pointer state — no stale closure issues
+  const ptr = useRef({
+    down: false,
+    movedEnough: false,
+    onHotspot: false,
+    startX: 0, startY: 0,
+    startPanX: 0, startPanY: 0,
+  });
+  const panRef = useRef({ x: 0, y: 0 });
   const lastPinchDist = useRef(null);
 
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
+  useEffect(() => { panRef.current = pan; }, [pan]);
+
   useEffect(() => {
     if (!storeId) return;
     panoramaAPI.getStore(storeId)
-      .then((res) => {
-        setStore(res.data);
-        setHotspots(res.data.hotspots || []);
-      })
+      .then((res) => { setStore(res.data); setHotspots(res.data.hotspots || []); })
       .catch((err) => console.error('Failed to load store:', err))
       .finally(() => setLoading(false));
   }, [storeId]);
 
+  const handleImgLoad = () => {
+    if (imgRef.current) {
+      setImgSize({ width: imgRef.current.clientWidth, height: imgRef.current.clientHeight });
+    }
+  };
+
   useEffect(() => {
     const updateSize = () => {
-      if (imgRef.current) {
-        setImgSize({ width: imgRef.current.clientWidth, height: imgRef.current.clientHeight });
-      }
+      if (imgRef.current) setImgSize({ width: imgRef.current.clientWidth, height: imgRef.current.clientHeight });
     };
-    const img = imgRef.current;
-    if (img) {
-      if (img.complete) updateSize();
-      img.addEventListener('load', updateSize);
-    }
     window.addEventListener('resize', updateSize);
-    return () => {
-      if (img) img.removeEventListener('load', updateSize);
-      window.removeEventListener('resize', updateSize);
-    };
-  }, [store?.imageUrl]);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
 
-  // Wheel zoom
+  // Wheel zoom — non-passive so we can preventDefault
   const handleWheel = useCallback((e) => {
     e.preventDefault();
-    const delta = -e.deltaY * 0.001;
-    setZoom((z) => Math.min(5, Math.max(1, z + delta * z)));
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    setZoom((z) => Math.min(5, Math.max(0.5, z * factor)));
   }, []);
 
   useEffect(() => {
@@ -86,41 +88,62 @@ export function PanoramaViewer({ storeId }) {
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
-  const startPan = (clientX, clientY) => {
-    isPanning.current = true;
-    pointerDownPos.current = { x: clientX, y: clientY };
-    panStart.current = { x: clientX, y: clientY, panX: pan.x, panY: pan.y };
+  // ---- Pointer handlers (mouse) ----
+  const handleMouseDown = (e) => {
+    if (e.button !== 0) return;
+    // Check if the actual target or any ancestor is a hotspot
+    const onHotspot = !!e.target.closest('[data-hotspot]');
+    ptr.current = {
+      down: true,
+      movedEnough: false,
+      onHotspot,
+      startX: e.clientX, startY: e.clientY,
+      startPanX: panRef.current.x, startPanY: panRef.current.y,
+    };
   };
 
-  const movePan = (clientX, clientY) => {
-    if (!isPanning.current) return;
-    setPan({
-      x: panStart.current.panX + (clientX - panStart.current.x),
-      y: panStart.current.panY + (clientY - panStart.current.y),
-    });
+  const handleMouseMove = (e) => {
+    if (!ptr.current.down || ptr.current.onHotspot) return;
+    const dx = e.clientX - ptr.current.startX;
+    const dy = e.clientY - ptr.current.startY;
+    if (!ptr.current.movedEnough && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      ptr.current.movedEnough = true;
+      setIsPanning(true);
+    }
+    if (ptr.current.movedEnough) {
+      const newPan = { x: ptr.current.startPanX + dx, y: ptr.current.startPanY + dy };
+      setPan(newPan);
+      panRef.current = newPan;
+    }
   };
 
-  const endPan = () => { isPanning.current = false; };
-
-  // Did the pointer move enough to count as a drag?
-  const isDrag = (clientX, clientY) => {
-    const dx = clientX - pointerDownPos.current.x;
-    const dy = clientY - pointerDownPos.current.y;
-    return Math.sqrt(dx * dx + dy * dy) > 5;
+  const handleMouseUp = () => {
+    ptr.current.down = false;
+    setIsPanning(false);
   };
 
+  // ---- Touch handlers ----
   const pinchDist = (touches) => {
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
-    return Math.sqrt(dx * dx + dy * dy);
+    return Math.hypot(dx, dy);
   };
 
   const handleTouchStart = (e) => {
     if (e.touches.length === 2) {
       lastPinchDist.current = pinchDist(e.touches);
-    } else {
-      startPan(e.touches[0].clientX, e.touches[0].clientY);
+      ptr.current.down = false; // cancel any active pan
+      return;
     }
+    const t = e.touches[0];
+    const onHotspot = !!e.target.closest('[data-hotspot]');
+    ptr.current = {
+      down: true,
+      movedEnough: false,
+      onHotspot,
+      startX: t.clientX, startY: t.clientY,
+      startPanX: panRef.current.x, startPanY: panRef.current.y,
+    };
   };
 
   const handleTouchMove = (e) => {
@@ -129,27 +152,40 @@ export function PanoramaViewer({ storeId }) {
       const dist = pinchDist(e.touches);
       if (lastPinchDist.current) {
         const ratio = dist / lastPinchDist.current;
-        setZoom((z) => Math.min(5, Math.max(1, z * ratio)));
+        setZoom((z) => Math.min(5, Math.max(0.5, z * ratio)));
       }
       lastPinchDist.current = dist;
-    } else {
-      movePan(e.touches[0].clientX, e.touches[0].clientY);
+      return;
+    }
+    if (!ptr.current.down || ptr.current.onHotspot) return;
+    const t = e.touches[0];
+    const dx = t.clientX - ptr.current.startX;
+    const dy = t.clientY - ptr.current.startY;
+    if (!ptr.current.movedEnough && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+      ptr.current.movedEnough = true;
+      setIsPanning(true);
+    }
+    if (ptr.current.movedEnough) {
+      const newPan = { x: ptr.current.startPanX + dx, y: ptr.current.startPanY + dy };
+      setPan(newPan);
+      panRef.current = newPan;
     }
   };
 
   const handleTouchEnd = () => {
     lastPinchDist.current = null;
-    endPan();
+    ptr.current.down = false;
+    setIsPanning(false);
   };
 
-  const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+  const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); panRef.current = { x: 0, y: 0 }; };
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f9fafb' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#111827' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ width: 44, height: 44, borderRadius: '50%', border: '4px solid #e5e7eb', borderTopColor: '#1e40af', animation: 'spin 0.9s linear infinite', margin: '0 auto 16px' }} />
-          <p style={{ color: '#6b7280', fontSize: 14 }}>Loading...</p>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', border: '4px solid rgba(255,255,255,0.15)', borderTopColor: '#3b82f6', animation: 'spin 0.9s linear infinite', margin: '0 auto 16px' }} />
+          <p style={{ color: '#9ca3af', fontSize: 14 }}>Loading...</p>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -159,9 +195,9 @@ export function PanoramaViewer({ storeId }) {
   const shopLabel = user?.shop?.name || (user?.role === 'DEVELOPER' ? 'Developer' : '');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100vh' }}>
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: '#111827' }}>
       {/* Header */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', flexShrink: 0 }}>
+      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', flexShrink: 0, zIndex: 20 }}>
         <div style={{ maxWidth: 1280, margin: '0 auto', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1e40af', letterSpacing: '-0.3px' }}>OPTIVIEW</h1>
@@ -201,21 +237,21 @@ export function PanoramaViewer({ storeId }) {
         </div>
       </div>
 
-      {/* Image area — zoom + pan container */}
+      {/* Full-screen pan/zoom stage */}
       <div
         ref={containerRef}
-        style={{ flex: 1, overflow: 'hidden', background: '#111827', position: 'relative', cursor: isPanning.current ? 'grabbing' : 'grab', touchAction: 'none' }}
-        onMouseDown={(e) => { if (e.button === 0) startPan(e.clientX, e.clientY); }}
-        onMouseMove={(e) => movePan(e.clientX, e.clientY)}
-        onMouseUp={(e) => endPan()}
-        onMouseLeave={() => endPan()}
+        style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none', userSelect: 'none' }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
         {store?.imageUrl ? (
           <>
-            {/* Transformed layer */}
+            {/* Transformed layer — centered, then panned + scaled */}
             <div style={{
               position: 'absolute', top: '50%', left: '50%',
               transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
@@ -226,9 +262,17 @@ export function PanoramaViewer({ storeId }) {
                 <img
                   ref={imgRef}
                   src={store.imageUrl}
-                  alt={store.name}
+                  alt={store.name || 'Shop'}
                   draggable={false}
-                  style={{ maxWidth: '80vw', maxHeight: '80vh', height: 'auto', display: 'block', borderRadius: 10, boxShadow: '0 8px 32px rgba(0,0,0,0.5)', userSelect: 'none' }}
+                  onLoad={handleImgLoad}
+                  style={{
+                    display: 'block',
+                    height: '85vh',
+                    width: 'auto',
+                    maxWidth: 'none',
+                    userSelect: 'none',
+                    pointerEvents: 'none',
+                  }}
                 />
 
                 {imgSize.width > 0 && hotspots.map((h) => {
@@ -241,19 +285,21 @@ export function PanoramaViewer({ storeId }) {
                   return (
                     <button
                       key={h.id}
+                      data-hotspot="true"
                       title={h.label}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!isDrag(e.clientX, e.clientY)) navigate(`/module/${h.module}`);
+                      onClick={() => {
+                        // Only navigate if the pointer didn't drag
+                        if (!ptr.current.movedEnough) navigate(`/module/${h.module}`);
                       }}
                       style={{
-                        position: 'absolute', left, top, width, height, boxSizing: 'border-box',
+                        position: 'absolute', left, top, width, height,
+                        boxSizing: 'border-box',
                         background: MODULE_COLORS[h.module] || MODULE_COLORS[''],
                         border: `2px solid ${color}`,
-                        borderRadius: 4, cursor: 'pointer',
+                        borderRadius: 6,
+                        cursor: 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        transition: 'background 0.15s', padding: 0,
+                        padding: 0,
                       }}
                       onMouseEnter={(e) => { e.currentTarget.style.background = (MODULE_COLORS[h.module] || 'rgba(156,163,175,0.20)').replace('0.20', '0.40'); }}
                       onMouseLeave={(e) => { e.currentTarget.style.background = MODULE_COLORS[h.module] || MODULE_COLORS['']; }}
@@ -261,10 +307,12 @@ export function PanoramaViewer({ storeId }) {
                       <span style={{
                         fontSize: Math.max(10, Math.min(15, width / 7)),
                         fontWeight: 700, color,
-                        textShadow: '0 1px 3px rgba(0,0,0,0.4)',
                         pointerEvents: 'none',
                         maxWidth: '90%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                        padding: '2px 6px', background: 'rgba(255,255,255,0.75)', borderRadius: 3,
+                        padding: '2px 6px',
+                        background: 'rgba(255,255,255,0.82)',
+                        borderRadius: 3,
+                        textShadow: 'none',
                       }}>
                         {h.label}
                       </span>
@@ -277,17 +325,21 @@ export function PanoramaViewer({ storeId }) {
             {/* Zoom controls */}
             <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', flexDirection: 'column', gap: 6, zIndex: 10 }}>
               {[
-                { label: '+', action: () => setZoom((z) => Math.min(5, parseFloat((z + 0.3).toFixed(2)))) },
-                { label: '−', action: () => setZoom((z) => Math.max(1, parseFloat((z - 0.3).toFixed(2)))) },
-                { label: '↺',  action: resetView },
+                { label: '+', action: () => setZoom((z) => Math.min(5, parseFloat((z * 1.25).toFixed(3)))) },
+                { label: '−', action: () => setZoom((z) => Math.max(0.5, parseFloat((z / 1.25).toFixed(3)))) },
+                { label: '↺', action: resetView },
               ].map(({ label, action }) => (
-                <button key={label} onClick={action}
-                  style={{ width: 38, height: 38, background: 'rgba(255,255,255,0.92)', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', fontSize: label === '↺' ? 16 : 20, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }}>
+                <button
+                  key={label}
+                  // stopPropagation prevents the container's mousedown from treating this as a pan start
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); action(); }}
+                  style={{ width: 40, height: 40, background: 'rgba(255,255,255,0.92)', border: '1px solid rgba(0,0,0,0.15)', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.25)', fontSize: label === '↺' ? 16 : 22, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }}>
                   {label}
                 </button>
               ))}
               {zoom !== 1 && (
-                <div style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', borderRadius: 6, padding: '2px 6px', fontSize: 11, textAlign: 'center' }}>
+                <div style={{ background: 'rgba(0,0,0,0.55)', color: '#fff', borderRadius: 6, padding: '3px 6px', fontSize: 11, textAlign: 'center', fontWeight: 600 }}>
                   {Math.round(zoom * 100)}%
                 </div>
               )}
@@ -295,11 +347,11 @@ export function PanoramaViewer({ storeId }) {
           </>
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ textAlign: 'center', color: '#6b7280' }}>
-              <p style={{ fontSize: 15, marginBottom: 8 }}>No image set for this store.</p>
+            <div style={{ textAlign: 'center', color: '#9ca3af' }}>
+              <p style={{ fontSize: 16, marginBottom: 12 }}>No shop image yet.</p>
               <button onClick={() => navigate('/editor')}
-                style={{ padding: '8px 20px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, cursor: 'pointer' }}>
-                Open Editor to add an image
+                style={{ padding: '9px 22px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+                Add an image in the editor
               </button>
             </div>
           </div>
