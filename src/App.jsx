@@ -14,6 +14,7 @@ import { EmployeesPage } from './pages/EmployeesPage';
 import { AdminPage } from './pages/AdminPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { ClientProfilePage } from './pages/ClientProfilePage';
+import { SettingsPage } from './pages/SettingsPage';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
           <Route path="/module/orders" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
 
           <Route path="/employees" element={<ProtectedRoute roles={['OPTICIAN']}><EmployeesPage /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute roles={['OPTICIAN']}><SettingsPage /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute roles={['DEVELOPER']}><AdminPage /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />

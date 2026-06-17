@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { ModuleLayout } from '../components/ModuleLayout';
 import { OrderModal } from '../components/atelier/OrderModal';
 import { atelierAPI } from '../api/client';
-import { Plus, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Plus, Search, ChevronDown, ChevronUp, Pencil, Trash2, MessageCircle } from 'lucide-react';
 
 const TYPE_LABELS = {
   sale:         'Sale',
@@ -27,7 +28,16 @@ const inputStyle = {
   fontSize: 14, outline: 'none', color: '#111827', background: '#fff',
 };
 
+function buildWhatsAppLink(phone, message) {
+  if (!phone) return null;
+  let digits = phone.replace(/\D/g, '');
+  if (digits.startsWith('0')) digits = '212' + digits.slice(1);
+  else if (digits.length === 9) digits = '212' + digits;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
 export function OrdersPage() {
+  const { user } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -35,6 +45,7 @@ export function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [expanded, setExpanded] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [editingOrder, setEditingOrder] = useState(null);
   const debounceRef = useRef(null);
 
   useEffect(() => {
@@ -47,9 +58,9 @@ export function OrdersPage() {
     try {
       setLoading(true);
       const params = {};
-      if (search)      params.search    = search;
-      if (typeFilter)  params.orderType = typeFilter;
-      if (statusFilter) params.status   = statusFilter;
+      if (search)       params.search    = search;
+      if (typeFilter)   params.orderType = typeFilter;
+      if (statusFilter) params.status    = statusFilter;
       const res = await atelierAPI.getOrders(params);
       setOrders(res.data);
     } catch (e) {
@@ -68,6 +79,38 @@ export function OrdersPage() {
       const msg = err.response?.data?.message || 'Failed to create order';
       alert(Array.isArray(msg) ? msg.join(', ') : msg);
     }
+  };
+
+  const handleUpdate = async (data) => {
+    try {
+      await atelierAPI.updateOrder(editingOrder.id, data);
+      setEditingOrder(null);
+      await load();
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Failed to update order';
+      alert(Array.isArray(msg) ? msg.join(', ') : msg);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this order? Stock will be restored.')) return;
+    try {
+      await atelierAPI.deleteOrder(id);
+      setExpanded(null);
+      await load();
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to delete order');
+    }
+  };
+
+  const sendWhatsApp = (o) => {
+    const phone = o.client?.phone;
+    if (!phone) { alert('This client has no phone number.'); return; }
+    const shopName = user?.shop?.name || 'OPTIVIEW';
+    const clientName = o.client ? o.client.firstName : 'cher client';
+    const msg = `Bonjour ${clientName}, votre commande ${o.orderNumber} chez ${shopName} est prête. Merci !`;
+    const link = buildWhatsAppLink(phone, msg);
+    if (link) window.open(link, '_blank');
   };
 
   return (
@@ -220,6 +263,30 @@ export function OrdersPage() {
                       <span style={{ fontSize: 14, color: '#111827' }}>Total</span>
                       <span style={{ fontSize: 15, color: '#1e40af' }}>{o.totalPrice.toLocaleString()} MAD</span>
                     </div>
+
+                    {/* Action row */}
+                    <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => setEditingOrder(o)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: 7, background: '#fff', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                      >
+                        <Pencil size={13} /> Edit
+                      </button>
+                      {o.client?.phone && (
+                        <button
+                          onClick={() => sendWhatsApp(o)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', border: 'none', borderRadius: 7, background: '#16a34a', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                        >
+                          <MessageCircle size={13} /> WhatsApp
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(o.id)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', border: '1px solid #fecaca', borderRadius: 7, background: '#fff', color: '#dc2626', fontSize: 13, fontWeight: 500, cursor: 'pointer', marginLeft: 'auto' }}
+                      >
+                        <Trash2 size={13} /> Delete
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -230,6 +297,9 @@ export function OrdersPage() {
 
       {showModal && (
         <OrderModal onSave={handleCreate} onClose={() => setShowModal(false)} />
+      )}
+      {editingOrder && (
+        <OrderModal order={editingOrder} onSave={handleUpdate} onClose={() => setEditingOrder(null)} />
       )}
     </ModuleLayout>
   );

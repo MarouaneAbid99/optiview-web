@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
+import { LogOut, Settings as SettingsIcon } from 'lucide-react';
 import { panoramaAPI } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
@@ -214,10 +214,18 @@ export function PanoramaViewer({ storeId }) {
               </div>
             )}
             {user?.role === 'OPTICIAN' && (
-              <button onClick={() => navigate('/employees')}
-                style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                Employees
-              </button>
+              <>
+                <button onClick={() => navigate('/employees')}
+                  style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  Employees
+                </button>
+                <button onClick={() => navigate('/settings')} title="Shop Settings"
+                  style={{ padding: 7, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#374151' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = '#e5e7eb'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = '#f3f4f6'; }}>
+                  <SettingsIcon size={17} />
+                </button>
+              </>
             )}
             {user?.role === 'DEVELOPER' && (
               <button onClick={() => navigate('/admin')}

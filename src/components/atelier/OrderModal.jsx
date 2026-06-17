@@ -15,7 +15,9 @@ const ORDER_TYPES = [
   { value: 'montage',      label: 'Montage only',   sub: "Client's own materials, labor only" },
 ];
 
-export function OrderModal({ onSave, onClose }) {
+export function OrderModal({ order, onSave, onClose }) {
+  const isEdit = !!order;
+
   const [clients, setClients] = useState([]);
   const [frames, setFrames] = useState([]);
   const [lenses, setLenses] = useState([]);
@@ -23,14 +25,16 @@ export function OrderModal({ onSave, onClose }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const [orderType, setOrderType] = useState('sale_montage');
+  const [orderType, setOrderType] = useState(order?.orderType || 'sale_montage');
   const [form, setForm] = useState({
-    clientId: '',
-    frameId: '',
-    items: [{ lensId: '', quantity: 1 }],
-    laborPrice: '',
-    notes: '',
-    deliveryDate: '',
+    clientId: order?.clientId || '',
+    frameId: order?.frameId || '',
+    items: order?.items?.length
+      ? order.items.map((it) => ({ lensId: it.lensId, quantity: it.quantity }))
+      : [{ lensId: '', quantity: 1 }],
+    laborPrice: order?.laborPrice ?? '',
+    notes: order?.notes || '',
+    deliveryDate: order?.deliveryDate ? order.deliveryDate.split('T')[0] : '',
   });
 
   const involvesStock = orderType === 'sale' || orderType === 'sale_montage';
@@ -45,8 +49,9 @@ export function OrderModal({ onSave, onClose }) {
           lensesAPI.getLenses(),
         ]);
         setClients(cRes.data);
-        setFrames(fRes.data.filter((f) => f.stock > 0));
-        setLenses(lRes.data.filter((l) => l.stock > 0));
+        // In edit mode show all items (including 0-stock) so current selection appears
+        setFrames(isEdit ? fRes.data : fRes.data.filter((f) => f.stock > 0));
+        setLenses(isEdit ? lRes.data : lRes.data.filter((l) => l.stock > 0));
       } catch {
         setError('Failed to load options');
       } finally {
@@ -98,7 +103,7 @@ export function OrderModal({ onSave, onClose }) {
       await onSave(payload);
     } catch (err) {
       const msg = err?.response?.data?.message;
-      setError(Array.isArray(msg) ? msg[0] : (msg || err?.message || 'Failed to create order'));
+      setError(Array.isArray(msg) ? msg[0] : (msg || err?.message || `Failed to ${isEdit ? 'update' : 'create'} order`));
       setSaving(false);
     }
   };
@@ -127,7 +132,7 @@ export function OrderModal({ onSave, onClose }) {
       >
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, background: '#fff', zIndex: 1 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>New Order</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111827' }}>{isEdit ? 'Edit Order' : 'New Order'}</h2>
           <button onClick={onClose} style={{ padding: 6, background: 'none', border: 'none', cursor: 'pointer' }}>
             <X size={20} color="#6b7280" />
           </button>
@@ -189,7 +194,7 @@ export function OrderModal({ onSave, onClose }) {
                   ))}
                 </select>
                 {frames.length === 0 && (
-                  <p style={{ fontSize: 12, color: '#dc2626', marginTop: 4 }}>No frames in stock</p>
+                  <p style={{ fontSize: 12, color: '#dc2626', marginTop: 4 }}>No frames available</p>
                 )}
               </div>
 
@@ -280,7 +285,7 @@ export function OrderModal({ onSave, onClose }) {
             </button>
             <button type="submit" disabled={saving}
               style={{ flex: 1, padding: 10, border: 'none', borderRadius: 8, background: saving ? '#93c5fd' : '#1e40af', color: '#fff', fontSize: 14, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer' }}>
-              {saving ? 'Creating…' : 'Create Order'}
+              {saving ? (isEdit ? 'Saving…' : 'Creating…') : (isEdit ? 'Save Changes' : 'Create Order')}
             </button>
           </div>
         </form>

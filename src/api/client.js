@@ -130,6 +130,9 @@ export const usersAPI = {
   createOptician: (data) => client.post('/users/opticians', data),
   listShops: () => client.get('/users/shops'),
   setShopActive: (id, active) => client.patch(`/users/shops/${id}/active`, { active }),
+
+  getMyShop: () => client.get('/users/my-shop'),
+  updateMyShop: (data) => client.patch('/users/my-shop', data),
 };
 
 export default client;
