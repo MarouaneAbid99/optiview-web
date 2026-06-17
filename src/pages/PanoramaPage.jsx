@@ -2,35 +2,26 @@ import { useState, useEffect } from 'react';
 import { PanoramaViewer } from '../components/PanoramaViewer';
 import { panoramaAPI } from '../api/client';
 
-const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1574619988379-b1e65e7d4204?w=4096&h=2048&fit=crop';
-
 export function PanoramaPage() {
-  const [store, setStore] = useState(null);
+  const [storeId, setStoreId] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    const loadStore = async () => {
+    const init = async () => {
       try {
-        const response = await panoramaAPI.getStores();
-        if (response.data.length > 0) {
-          // Load the first store with its hotspots
-          const storeRes = await panoramaAPI.getStore(response.data[0].id);
-          setStore(storeRes.data);
+        const res = await panoramaAPI.getStores();
+        if (res.data.length > 0) {
+          setStoreId(res.data[0].id);
         } else {
-          // Create a default store
-          const newStore = await panoramaAPI.createStore({
-            name: 'Default Optical Shop',
-            imageUrl: FALLBACK_IMAGE,
-          });
-          setStore({ ...newStore.data, hotspots: [] });
+          const created = await panoramaAPI.createStore({ name: 'My Optical Shop', imageUrl: '' });
+          setStoreId(created.data.id);
         }
       } catch (err) {
         console.error('Failed to load store:', err);
-        setError('Cannot connect to backend. Make sure the server is running on port 3000.');
+        setError('Cannot connect to backend. Make sure the server is running.');
       }
     };
-
-    loadStore();
+    init();
   }, []);
 
   if (error) {
@@ -51,23 +42,17 @@ export function PanoramaPage() {
     );
   }
 
-  if (!store) {
+  if (!storeId) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f9fafb' }}>
         <div style={{ textAlign: 'center' }}>
-          <div
-            style={{
-              width: 44, height: 44, borderRadius: '50%',
-              border: '4px solid #e5e7eb', borderTopColor: '#1e40af',
-              animation: 'spin 0.9s linear infinite', margin: '0 auto 16px',
-            }}
-          />
-          <p style={{ color: '#6b7280', fontSize: 14 }}>Loading panorama...</p>
+          <div style={{ width: 44, height: 44, borderRadius: '50%', border: '4px solid #e5e7eb', borderTopColor: '#1e40af', animation: 'spin 0.9s linear infinite', margin: '0 auto 16px' }} />
+          <p style={{ color: '#6b7280', fontSize: 14 }}>Loading...</p>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       </div>
     );
   }
 
-  return <PanoramaViewer store={store} />;
+  return <PanoramaViewer storeId={storeId} />;
 }
