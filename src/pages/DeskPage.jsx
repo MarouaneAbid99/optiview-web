@@ -130,6 +130,7 @@ export function DeskPage() {
     { label: 'Eyewear',  path: '/module/eyewear',  bg: '#3b82f6' },
     { label: 'Lenses',   path: '/module/lenses',   bg: '#a855f7' },
     { label: 'Atelier',  path: '/module/atelier',  bg: '#f97316' },
+    { label: 'Orders',   path: '/module/orders',   bg: '#0d9488' },
   ];
 
   return (

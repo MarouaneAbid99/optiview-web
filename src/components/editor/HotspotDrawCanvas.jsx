@@ -6,6 +6,7 @@ const MODULE_COLORS = {
   lenses:  'rgba(168, 85, 247, 0.25)',
   atelier: 'rgba(249, 115, 22, 0.25)',
   desk:    'rgba(236, 72, 153, 0.25)',
+  orders:  'rgba(13, 148, 136, 0.18)',
   '':      'rgba(156, 163, 175, 0.25)',
 };
 
@@ -15,6 +16,7 @@ const MODULE_BORDERS = {
   lenses:  '#a855f7',
   atelier: '#f97316',
   desk:    '#ec4899',
+  orders:  '#0d9488',
   '':      '#9ca3af',
 };
 

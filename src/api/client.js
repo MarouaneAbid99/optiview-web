@@ -110,8 +110,7 @@ export const lensesAPI = {
 };
 
 export const atelierAPI = {
-  getOrders: (status = '') =>
-    client.get('/atelier/orders', { params: { ...(status && { status }) } }),
+  getOrders: (params = {}) => client.get('/atelier/orders', { params }),
   getKanban: () => client.get('/atelier/orders/kanban'),
   getStats: () => client.get('/atelier/orders/stats'),
   getOrderById: (id) => client.get(`/atelier/orders/${id}`),
