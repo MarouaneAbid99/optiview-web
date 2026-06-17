@@ -10,6 +10,8 @@ import { EyewearPage } from './pages/EyewearPage';
 import { LensesPage } from './pages/LensesPage';
 import { AtelierPage } from './pages/AtelierPage';
 import { DeskPage } from './pages/DeskPage';
+import { EmployeesPage } from './pages/EmployeesPage';
+import { AdminPage } from './pages/AdminPage';
 
 function App() {
   return (
@@ -26,6 +28,9 @@ function App() {
           <Route path="/module/lenses" element={<ProtectedRoute><LensesPage /></ProtectedRoute>} />
           <Route path="/module/atelier" element={<ProtectedRoute><AtelierPage /></ProtectedRoute>} />
           <Route path="/module/desk" element={<ProtectedRoute><DeskPage /></ProtectedRoute>} />
+
+          <Route path="/employees" element={<ProtectedRoute roles={['OPTICIAN']}><EmployeesPage /></ProtectedRoute>} />
+          <Route path="/admin" element={<ProtectedRoute roles={['DEVELOPER']}><AdminPage /></ProtectedRoute>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

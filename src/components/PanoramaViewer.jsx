@@ -91,6 +91,22 @@ export function PanoramaViewer({ storeId }) {
                 {shopLabel && <p style={{ fontSize: 12, color: '#6b7280', whiteSpace: 'nowrap' }}>{shopLabel}</p>}
               </div>
             )}
+            {user?.role === 'OPTICIAN' && (
+              <button
+                onClick={() => navigate('/employees')}
+                style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                Employees
+              </button>
+            )}
+            {user?.role === 'DEVELOPER' && (
+              <button
+                onClick={() => navigate('/admin')}
+                style={{ padding: '7px 14px', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                Admin
+              </button>
+            )}
             <button
               onClick={() => navigate('/editor')}
               style={{ padding: '7px 14px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}

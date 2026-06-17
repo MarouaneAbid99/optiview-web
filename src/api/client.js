@@ -121,4 +121,16 @@ export const atelierAPI = {
   deleteOrder: (id) => client.delete(`/atelier/orders/${id}`),
 };
 
+export const usersAPI = {
+  listEmployees: () => client.get('/users/employees'),
+  createEmployee: (data) => client.post('/users/employees', data),
+  setEmployeeActive: (id, active) => client.patch(`/users/employees/${id}/active`, { active }),
+  deleteEmployee: (id) => client.delete(`/users/employees/${id}`),
+
+  listOpticians: () => client.get('/users/opticians'),
+  createOptician: (data) => client.post('/users/opticians', data),
+  listShops: () => client.get('/users/shops'),
+  setShopActive: (id, active) => client.patch(`/users/shops/${id}/active`, { active }),
+};
+
 export default client;
