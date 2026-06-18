@@ -1,52 +1,93 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { LogOut, Settings as SettingsIcon, Users, Glasses, Eye, Wrench, LayoutDashboard, ClipboardList, MapPin } from 'lucide-react';
 import { panoramaAPI } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
-const MODULE_COLORS = {
-  clients: 'rgba(34, 197, 94, 0.20)',
-  eyewear: 'rgba(59, 130, 246, 0.20)',
-  lenses:  'rgba(168, 85, 247, 0.20)',
-  atelier: 'rgba(249, 115, 22, 0.20)',
-  desk:    'rgba(236, 72, 153, 0.20)',
-  orders:  'rgba(13, 148, 136, 0.18)',
-  '':      'rgba(156, 163, 175, 0.20)',
+// ─── Module metadata ───────────────────────────────────────────────────────
+const MODULE_META = {
+  clients: { color: '#22c55e', Icon: Users },
+  eyewear: { color: '#3b82f6', Icon: Glasses },
+  lenses:  { color: '#a855f7', Icon: Eye },
+  atelier: { color: '#f97316', Icon: Wrench },
+  desk:    { color: '#ec4899', Icon: LayoutDashboard },
+  orders:  { color: '#0d9488', Icon: ClipboardList },
+  '':      { color: '#6b7280', Icon: MapPin },
 };
 
-const MODULE_BORDERS = {
-  clients: '#22c55e',
-  eyewear: '#3b82f6',
-  lenses:  '#a855f7',
-  atelier: '#f97316',
-  desk:    '#ec4899',
-  orders:  '#0d9488',
-  '':      '#9ca3af',
-};
+// ─── HotspotPin ────────────────────────────────────────────────────────────
+function HotspotPin({ hotspot, cx, cy, zoom, onClick }) {
+  const { color, Icon } = MODULE_META[hotspot.module] || MODULE_META[''];
+  const [hovered, setHovered] = useState(false);
+  // Counter-scale so the pin keeps a comfortable size regardless of zoom
+  const inv = 1 / zoom;
 
+  return (
+    <button
+      data-hotspot="true"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'absolute',
+        left: `${cx}%`,
+        top: `${cy}%`,
+        transform: `translate(-50%, -50%) scale(${inv})`,
+        transformOrigin: 'center center',
+        background: 'none',
+        border: 'none',
+        padding: 0,
+        cursor: 'pointer',
+        zIndex: 10,
+      }}
+    >
+      {/* Pulse ring */}
+      <span style={{
+        position: 'absolute', inset: 0, borderRadius: '50%',
+        backgroundColor: color, opacity: 0.4,
+        animation: 'pin-ping 1.5s ease-out infinite',
+      }} />
+      {/* Pin body */}
+      <span style={{
+        position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        width: 40, height: 40, borderRadius: '50%',
+        backgroundColor: color, border: '2px solid #fff',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
+      }}>
+        <Icon size={18} color="#fff" />
+      </span>
+      {/* Label — shows on hover */}
+      <span style={{
+        position: 'absolute', left: '50%', top: '100%', marginTop: 4,
+        transform: 'translateX(-50%)',
+        whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 4,
+        fontSize: 12, fontWeight: 700, color: '#fff',
+        backgroundColor: color,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+        opacity: hovered ? 1 : 0,
+        transition: 'opacity 0.15s',
+        pointerEvents: 'none',
+      }}>
+        {hotspot.label}
+      </span>
+    </button>
+  );
+}
+
+// ─── Main component ────────────────────────────────────────────────────────
 const DRAG_THRESHOLD = 6;
 
 export function PanoramaViewer({ storeId }) {
-  const imgRef = useRef(null);
-  const containerRef = useRef(null);
-  const [imgSize, setImgSize] = useState({ width: 0, height: 0 });
-  const [store, setStore] = useState(null);
+  const stageRef = useRef(null);
+  const [store, setStore]       = useState(null);
   const [hotspots, setHotspots] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [loading, setLoading]   = useState(true);
+  const [zoom, setZoom]         = useState(1);
+  const [pan, setPan]           = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
 
-  // Single ref tracks all pointer state — no stale closure issues
-  const ptr = useRef({
-    down: false,
-    movedEnough: false,
-    onHotspot: false,
-    startX: 0, startY: 0,
-    startPanX: 0, startPanY: 0,
-  });
-  const panRef = useRef({ x: 0, y: 0 });
+  const panRef  = useRef({ x: 0, y: 0 });
+  const ptr     = useRef({ down: false, movedEnough: false, onHotspot: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
   const lastPinchDist = useRef(null);
 
   const navigate = useNavigate();
@@ -62,48 +103,26 @@ export function PanoramaViewer({ storeId }) {
       .finally(() => setLoading(false));
   }, [storeId]);
 
-  const handleImgLoad = () => {
-    if (imgRef.current) {
-      setImgSize({ width: imgRef.current.clientWidth, height: imgRef.current.clientHeight });
-    }
-  };
-
-  useEffect(() => {
-    const updateSize = () => {
-      if (imgRef.current) setImgSize({ width: imgRef.current.clientWidth, height: imgRef.current.clientHeight });
-    };
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
-  }, []);
-
-  // Wheel zoom — non-passive so we can preventDefault
+  // Non-passive wheel zoom
   const handleWheel = useCallback((e) => {
     e.preventDefault();
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    setZoom((z) => Math.min(5, Math.max(0.5, z * factor)));
+    setZoom((z) => Math.min(5, Math.max(1, parseFloat((z * factor).toFixed(3)))));
   }, []);
 
   useEffect(() => {
-    const el = containerRef.current;
+    const el = stageRef.current;
     if (!el) return;
     el.addEventListener('wheel', handleWheel, { passive: false });
     return () => el.removeEventListener('wheel', handleWheel);
   }, [handleWheel]);
 
-  // ---- Pointer handlers (mouse) ----
+  // ── Mouse handlers ──
   const handleMouseDown = (e) => {
     if (e.button !== 0) return;
-    // Check if the actual target or any ancestor is a hotspot
     const onHotspot = !!e.target.closest('[data-hotspot]');
-    ptr.current = {
-      down: true,
-      movedEnough: false,
-      onHotspot,
-      startX: e.clientX, startY: e.clientY,
-      startPanX: panRef.current.x, startPanY: panRef.current.y,
-    };
+    ptr.current = { down: true, movedEnough: false, onHotspot, startX: e.clientX, startY: e.clientY, startPanX: panRef.current.x, startPanY: panRef.current.y };
   };
-
   const handleMouseMove = (e) => {
     if (!ptr.current.down || ptr.current.onHotspot) return;
     const dx = e.clientX - ptr.current.startX;
@@ -118,44 +137,22 @@ export function PanoramaViewer({ storeId }) {
       panRef.current = newPan;
     }
   };
+  const handleMouseUp = () => { ptr.current.down = false; setIsPanning(false); };
 
-  const handleMouseUp = () => {
-    ptr.current.down = false;
-    setIsPanning(false);
-  };
-
-  // ---- Touch handlers ----
-  const pinchDist = (touches) => {
-    const dx = touches[0].clientX - touches[1].clientX;
-    const dy = touches[0].clientY - touches[1].clientY;
-    return Math.hypot(dx, dy);
-  };
+  // ── Touch handlers ──
+  const pinchDist = (touches) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
 
   const handleTouchStart = (e) => {
-    if (e.touches.length === 2) {
-      lastPinchDist.current = pinchDist(e.touches);
-      ptr.current.down = false; // cancel any active pan
-      return;
-    }
+    if (e.touches.length === 2) { lastPinchDist.current = pinchDist(e.touches); ptr.current.down = false; return; }
     const t = e.touches[0];
     const onHotspot = !!e.target.closest('[data-hotspot]');
-    ptr.current = {
-      down: true,
-      movedEnough: false,
-      onHotspot,
-      startX: t.clientX, startY: t.clientY,
-      startPanX: panRef.current.x, startPanY: panRef.current.y,
-    };
+    ptr.current = { down: true, movedEnough: false, onHotspot, startX: t.clientX, startY: t.clientY, startPanX: panRef.current.x, startPanY: panRef.current.y };
   };
-
   const handleTouchMove = (e) => {
     e.preventDefault();
     if (e.touches.length === 2) {
       const dist = pinchDist(e.touches);
-      if (lastPinchDist.current) {
-        const ratio = dist / lastPinchDist.current;
-        setZoom((z) => Math.min(5, Math.max(0.5, z * ratio)));
-      }
+      if (lastPinchDist.current) setZoom((z) => Math.min(5, Math.max(1, z * (dist / lastPinchDist.current))));
       lastPinchDist.current = dist;
       return;
     }
@@ -163,22 +160,10 @@ export function PanoramaViewer({ storeId }) {
     const t = e.touches[0];
     const dx = t.clientX - ptr.current.startX;
     const dy = t.clientY - ptr.current.startY;
-    if (!ptr.current.movedEnough && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
-      ptr.current.movedEnough = true;
-      setIsPanning(true);
-    }
-    if (ptr.current.movedEnough) {
-      const newPan = { x: ptr.current.startPanX + dx, y: ptr.current.startPanY + dy };
-      setPan(newPan);
-      panRef.current = newPan;
-    }
+    if (!ptr.current.movedEnough && Math.hypot(dx, dy) > DRAG_THRESHOLD) { ptr.current.movedEnough = true; setIsPanning(true); }
+    if (ptr.current.movedEnough) { const newPan = { x: ptr.current.startPanX + dx, y: ptr.current.startPanY + dy }; setPan(newPan); panRef.current = newPan; }
   };
-
-  const handleTouchEnd = () => {
-    lastPinchDist.current = null;
-    ptr.current.down = false;
-    setIsPanning(false);
-  };
+  const handleTouchEnd = () => { lastPinchDist.current = null; ptr.current.down = false; setIsPanning(false); };
 
   const resetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); panRef.current = { x: 0, y: 0 }; };
 
@@ -198,6 +183,14 @@ export function PanoramaViewer({ storeId }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: '#111827' }}>
+      <style>{`
+        @keyframes pin-ping {
+          0%   { transform: scale(1);   opacity: 0.4; }
+          75%  { transform: scale(2.2); opacity: 0; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
+      `}</style>
+
       {/* Header */}
       <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.07)', flexShrink: 0, zIndex: 20 }}>
         <div style={{ maxWidth: 1280, margin: '0 auto', padding: '10px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -247,10 +240,10 @@ export function PanoramaViewer({ storeId }) {
         </div>
       </div>
 
-      {/* Full-screen pan/zoom stage */}
+      {/* Stage — cover image + pins */}
       <div
-        ref={containerRef}
-        style={{ flex: 1, overflow: 'hidden', position: 'relative', cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none', userSelect: 'none' }}
+        ref={stageRef}
+        style={{ flex: 1, overflow: 'hidden', position: 'relative', background: '#111827', cursor: isPanning ? 'grabbing' : 'grab', touchAction: 'none', userSelect: 'none' }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -261,87 +254,47 @@ export function PanoramaViewer({ storeId }) {
       >
         {store?.imageUrl ? (
           <>
-            {/* Transformed layer — centered, then panned + scaled */}
+            {/* Transform layer — pan + zoom applied here */}
             <div style={{
-              position: 'absolute', top: '50%', left: '50%',
-              transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+              position: 'absolute', inset: 0,
+              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
               transformOrigin: 'center center',
               willChange: 'transform',
             }}>
-              <div style={{ position: 'relative', display: 'inline-block' }}>
-                <img
-                  ref={imgRef}
-                  src={store.imageUrl}
-                  alt={store.name || 'Shop'}
-                  draggable={false}
-                  onLoad={handleImgLoad}
-                  style={{
-                    display: 'block',
-                    height: '85vh',
-                    width: 'auto',
-                    maxWidth: 'none',
-                    userSelect: 'none',
-                    pointerEvents: 'none',
+              {/* Cover image */}
+              <div style={{
+                position: 'absolute', inset: 0,
+                backgroundImage: `url(${store.imageUrl})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+              }} />
+
+              {/* Hotspot pins — centered on the rectangle center, as % of stage */}
+              {hotspots.map((h) => (
+                <HotspotPin
+                  key={h.id}
+                  hotspot={h}
+                  cx={(h.x + h.w / 2) * 100}
+                  cy={(h.y + h.h / 2) * 100}
+                  zoom={zoom}
+                  onClick={() => {
+                    if (ptr.current.movedEnough) return;
+                    navigate(`/module/${h.module}`);
                   }}
                 />
-
-                {imgSize.width > 0 && hotspots.map((h) => {
-                  const left   = h.x * imgSize.width;
-                  const top    = h.y * imgSize.height;
-                  const width  = h.w * imgSize.width;
-                  const height = h.h * imgSize.height;
-                  const color  = MODULE_BORDERS[h.module] || MODULE_BORDERS[''];
-
-                  return (
-                    <button
-                      key={h.id}
-                      data-hotspot="true"
-                      title={h.label}
-                      onClick={() => {
-                        // Only navigate if the pointer didn't drag
-                        if (!ptr.current.movedEnough) navigate(`/module/${h.module}`);
-                      }}
-                      style={{
-                        position: 'absolute', left, top, width, height,
-                        boxSizing: 'border-box',
-                        background: MODULE_COLORS[h.module] || MODULE_COLORS[''],
-                        border: `2px solid ${color}`,
-                        borderRadius: 6,
-                        cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        padding: 0,
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = (MODULE_COLORS[h.module] || 'rgba(156,163,175,0.20)').replace('0.20', '0.40'); }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = MODULE_COLORS[h.module] || MODULE_COLORS['']; }}
-                    >
-                      <span style={{
-                        fontSize: Math.max(10, Math.min(15, width / 7)),
-                        fontWeight: 700, color,
-                        pointerEvents: 'none',
-                        maxWidth: '90%', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis',
-                        padding: '2px 6px',
-                        background: 'rgba(255,255,255,0.82)',
-                        borderRadius: 3,
-                        textShadow: 'none',
-                      }}>
-                        {h.label}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              ))}
             </div>
 
-            {/* Zoom controls */}
-            <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', flexDirection: 'column', gap: 6, zIndex: 10 }}>
+            {/* Zoom controls — outside the transform layer, fixed position */}
+            <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'flex', flexDirection: 'column', gap: 6, zIndex: 20 }}>
               {[
                 { label: '+', action: () => setZoom((z) => Math.min(5, parseFloat((z * 1.25).toFixed(3)))) },
-                { label: '−', action: () => setZoom((z) => Math.max(0.5, parseFloat((z / 1.25).toFixed(3)))) },
+                { label: '−', action: () => setZoom((z) => Math.max(1, parseFloat((z / 1.25).toFixed(3)))) },
                 { label: '↺', action: resetView },
               ].map(({ label, action }) => (
                 <button
                   key={label}
-                  // stopPropagation prevents the container's mousedown from treating this as a pan start
                   onMouseDown={(e) => e.stopPropagation()}
                   onClick={(e) => { e.stopPropagation(); action(); }}
                   style={{ width: 40, height: 40, background: 'rgba(255,255,255,0.92)', border: '1px solid rgba(0,0,0,0.15)', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.25)', fontSize: label === '↺' ? 16 : 22, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#111827' }}>

@@ -24,6 +24,9 @@ const STATUS_BADGE = {
   cancelled:    { bg: '#fee2e2', color: '#dc2626' },
 };
 
+const STATUS_OPTIONS = ['pending', 'in-progress', 'ready', 'delivered', 'cancelled'];
+const STATUS_LABELS  = { pending: 'Pending', 'in-progress': 'In Progress', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' };
+
 const inputStyle = {
   padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8,
   fontSize: 14, outline: 'none', color: '#111827', background: '#fff',
@@ -133,6 +136,15 @@ export function OrdersPage() {
       Date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
     }));
     downloadCSV(`commandes-${new Date().toISOString().split('T')[0]}.csv`, rows);
+  };
+
+  const changeStatus = async (id, status) => {
+    try {
+      const updated = await atelierAPI.updateStatus(id, status);
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, ...updated.data } : o)));
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to update status');
+    }
   };
 
   const sendWhatsApp = (o) => {
@@ -300,6 +312,26 @@ export function OrdersPage() {
                     <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
                       <span style={{ fontSize: 14, color: '#111827' }}>Total</span>
                       <span style={{ fontSize: 15, color: '#1e40af' }}>{o.totalPrice.toLocaleString()} MAD</span>
+                    </div>
+
+                    {/* Status changer */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 4 }}>
+                      <span style={{ fontSize: 13, color: '#6b7280', flexShrink: 0 }}>Status</span>
+                      <select
+                        value={o.status}
+                        onChange={(e) => changeStatus(o.id, e.target.value)}
+                        style={{
+                          padding: '5px 10px', border: `1px solid ${STATUS_BADGE[o.status]?.color || '#d1d5db'}`,
+                          borderRadius: 6, fontSize: 13, fontWeight: 600,
+                          color: STATUS_BADGE[o.status]?.color || '#374151',
+                          background: STATUS_BADGE[o.status]?.bg || '#f3f4f6',
+                          cursor: 'pointer', outline: 'none',
+                        }}
+                      >
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                        ))}
+                      </select>
                     </div>
 
                     {/* Action row */}
