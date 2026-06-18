@@ -3,7 +3,8 @@ import { ModuleLayout } from '../components/ModuleLayout';
 import { OrderModal } from '../components/atelier/OrderModal';
 import { atelierAPI } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Search, ChevronDown, ChevronUp, Pencil, Trash2, MessageCircle } from 'lucide-react';
+import { Plus, Search, ChevronDown, ChevronUp, Pencil, Trash2, MessageCircle, FileText, Download } from 'lucide-react';
+import { downloadCSV } from '../utils/csv';
 
 const TYPE_LABELS = {
   sale:         'Sale',
@@ -103,6 +104,37 @@ export function OrdersPage() {
     }
   };
 
+  const downloadInvoice = async (o) => {
+    try {
+      const res = await atelierAPI.getInvoice(o.id);
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Facture-${o.orderNumber}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Failed to generate invoice');
+    }
+  };
+
+  const exportOrders = () => {
+    const rows = orders.map((o) => ({
+      'N° Commande': o.orderNumber,
+      Type: o.orderType,
+      Client: o.client ? `${o.client.firstName} ${o.client.lastName}` : 'Passage',
+      Monture: o.frame ? `${o.frame.brand} ${o.frame.model}` : 'Propre',
+      'Nb Verres': o.items?.length || 0,
+      'Montage (MAD)': o.laborPrice ?? 0,
+      'Total (MAD)': o.totalPrice,
+      Statut: o.status,
+      Date: new Date(o.createdAt).toLocaleDateString('fr-FR'),
+    }));
+    downloadCSV(`commandes-${new Date().toISOString().split('T')[0]}.csv`, rows);
+  };
+
   const sendWhatsApp = (o) => {
     const phone = o.client?.phone;
     if (!phone) { alert('This client has no phone number.'); return; }
@@ -129,6 +161,12 @@ export function OrdersPage() {
               style={{ ...inputStyle, width: '100%', paddingLeft: 34, boxSizing: 'border-box' }}
             />
           </div>
+          <button
+            onClick={exportOrders}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            <Download size={15} /> Export CSV
+          </button>
           <button
             onClick={() => setShowModal(true)}
             style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
@@ -266,6 +304,12 @@ export function OrdersPage() {
 
                     {/* Action row */}
                     <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => downloadInvoice(o)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: 7, background: '#fff', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}
+                      >
+                        <FileText size={13} /> Invoice
+                      </button>
                       <button
                         onClick={() => setEditingOrder(o)}
                         style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', border: '1px solid #d1d5db', borderRadius: 7, background: '#fff', color: '#374151', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}

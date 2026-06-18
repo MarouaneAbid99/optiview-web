@@ -3,7 +3,8 @@ import { ModuleLayout } from '../components/ModuleLayout';
 import { FramesTable } from '../components/eyewear/FramesTable';
 import { FrameModal } from '../components/eyewear/FrameModal';
 import { eyewearAPI } from '../api/client';
-import { Plus, Package, TrendingUp, AlertTriangle, XCircle, Tag } from 'lucide-react';
+import { Plus, Package, TrendingUp, AlertTriangle, XCircle, Tag, Download } from 'lucide-react';
+import { downloadCSV } from '../utils/csv';
 
 function StatCard({ label, value, icon, color, sub }) {
   return (
@@ -127,6 +128,21 @@ export function EyewearPage() {
           </button>
         )}
         <div style={{ flex: 1 }} />
+        <button
+          onClick={() => {
+            const rows = frames.map((f) => ({
+              'Marque': f.brand,
+              'Modèle': f.model,
+              'Catégorie': f.category,
+              'Couleur': f.color || '',
+              'Prix (MAD)': f.price,
+              'Stock': f.stock,
+            }));
+            downloadCSV(`montures-${new Date().toISOString().split('T')[0]}.csv`, rows);
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <Download size={15} /> Export CSV
+        </button>
         <button onClick={() => handleOpenModal()}
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           <Plus size={16} /> Add Frame

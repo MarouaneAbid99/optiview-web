@@ -3,7 +3,8 @@ import { ModuleLayout } from '../components/ModuleLayout';
 import { LensesTable } from '../components/lenses/LensesTable';
 import { LensModal } from '../components/lenses/LensModal';
 import { lensesAPI } from '../api/client';
-import { Plus, Eye, Layers, Tag, AlertTriangle, XCircle } from 'lucide-react';
+import { Plus, Eye, Layers, Tag, AlertTriangle, XCircle, Download } from 'lucide-react';
+import { downloadCSV } from '../utils/csv';
 
 function StatCard({ label, value, icon, color, sub }) {
   return (
@@ -129,6 +130,21 @@ export function LensesPage() {
           </button>
         )}
         <div style={{ flex: 1 }} />
+        <button
+          onClick={() => {
+            const rows = lenses.map((l) => ({
+              'Type': l.type,
+              'Matériau': l.material,
+              'Traitement': l.coating || '',
+              'Traitement spécial': l.treatment || '',
+              'Prix (MAD)': l.price,
+              'Stock': l.stock,
+            }));
+            downloadCSV(`verres-${new Date().toISOString().split('T')[0]}.csv`, rows);
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <Download size={15} /> Export CSV
+        </button>
         <button onClick={() => handleOpenModal()}
           style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
           <Plus size={16} /> Add Lens

@@ -3,7 +3,8 @@ import { ModuleLayout } from '../components/ModuleLayout';
 import { ClientsTable } from '../components/clients/ClientsTable';
 import { ClientModal } from '../components/clients/ClientModal';
 import { clientsAPI } from '../api/client';
-import { Plus, Users, FileText, Calendar } from 'lucide-react';
+import { Plus, Users, FileText, Calendar, Download } from 'lucide-react';
+import { downloadCSV } from '../utils/csv';
 
 function StatCard({ label, value, icon, color }) {
   return (
@@ -93,6 +94,22 @@ export function ClientsPage() {
           onChange={(e) => setSearch(e.target.value)}
           style={{ flex: '1 1 200px', padding: '9px 14px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, outline: 'none', color: '#111827' }}
         />
+        <button
+          onClick={() => {
+            const rows = clients.map((c) => ({
+              'Prénom': c.firstName,
+              'Nom': c.lastName,
+              'Email': c.email || '',
+              'Téléphone': c.phone || '',
+              'Adresse': c.address || '',
+              'Prescriptions': c.prescriptions?.length || 0,
+              'Rendez-vous': c.appointments?.length || 0,
+            }));
+            downloadCSV(`clients-${new Date().toISOString().split('T')[0]}.csv`, rows);
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 14px', background: '#fff', color: '#374151', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 14, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <Download size={15} /> Export CSV
+        </button>
         <button onClick={() => handleOpenModal()}
           style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '9px 18px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
           <Plus size={16} />
