@@ -150,7 +150,8 @@ export function PanoramaViewer({ storeId }) {
       .finally(() => setLoading(false));
   }, [storeId]);
 
-  // Clamp pan so no black gap is ever revealed
+  // Clamp pan — pan is in SCREEN pixels (applied outside the zoom layer)
+  // so the clamp is: half of the zoomed overflow in each axis.
   const clampPan = useCallback((x, y, z, cov, stage) => {
     const maxX = Math.max(0, (cov.w * z - stage.w) / 2);
     const maxY = Math.max(0, (cov.h * z - stage.h) / 2);
@@ -165,6 +166,17 @@ export function PanoramaViewer({ storeId }) {
     const maxY = Math.max(0, (cov.h * z - stage.h) / 2);
     return maxX > 0 || maxY > 0;
   }, []);
+
+  // Re-clamp whenever zoom, stage or cover dimensions change
+  useEffect(() => {
+    if (!coverW || !coverH || !stageSize.w || !stageSize.h) return;
+    setPan((p) => {
+      const c = clampPan(p.x, p.y, zoom, { w: coverW, h: coverH }, stageSize);
+      panRef.current = c;
+      return c;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zoom, stageSize.w, stageSize.h, coverW, coverH]);
 
   // Non-passive wheel
   const handleWheel = useCallback((e) => {
@@ -374,36 +386,47 @@ export function PanoramaViewer({ storeId }) {
             />
 
             {coverW > 0 && (
+              // Outer: pan in screen pixels (no scale applied here)
               <div
                 style={{
                   position: 'absolute',
                   top: '50%', left: '50%',
-                  width: coverW, height: coverH,
-                  transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                  transformOrigin: 'center center',
+                  width: 0, height: 0,          // zero-size anchor; children use their own size
+                  transform: `translate(${pan.x}px, ${pan.y}px)`,
                   transition: isPanning ? 'none' : 'transform 0.08s ease-out',
-                  backgroundImage: `url(${store.imageUrl})`,
-                  backgroundSize: '100% 100%',
-                  backgroundRepeat: 'no-repeat',
                   willChange: 'transform',
                 }}
               >
-                {/* Hotspot anchors */}
-                {hotspots.map((h) => (
-                  <HotspotAnchor
-                    key={h.id}
-                    hotspot={h}
-                    left={h.x * coverW}
-                    top={h.y * coverH}
-                    width={h.w * coverW}
-                    height={h.h * coverH}
-                    zoom={zoom}
-                    onClick={() => {
-                      if (ptr.current.movedEnough) return;
-                      navigate(`/module/${h.module}`);
-                    }}
-                  />
-                ))}
+                {/* Inner: zoom only, centered on the anchor */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0, left: 0,
+                    width: coverW, height: coverH,
+                    transform: `translate(-50%, -50%) scale(${zoom})`,
+                    transformOrigin: 'center center',
+                    backgroundImage: `url(${store.imageUrl})`,
+                    backgroundSize: '100% 100%',
+                    backgroundRepeat: 'no-repeat',
+                  }}
+                >
+                  {/* Hotspot anchors */}
+                  {hotspots.map((h) => (
+                    <HotspotAnchor
+                      key={h.id}
+                      hotspot={h}
+                      left={h.x * coverW}
+                      top={h.y * coverH}
+                      width={h.w * coverW}
+                      height={h.h * coverH}
+                      zoom={zoom}
+                      onClick={() => {
+                        if (ptr.current.movedEnough) return;
+                        navigate(`/module/${h.module}`);
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
             )}
 
