@@ -33,14 +33,14 @@ function HotspotAnchor({ hotspot, left, top, width, height, zoom, onClick }) {
         cursor: 'pointer',
       }}
     >
-      {/* Nearly invisible click area — faint hover tint */}
+      {/* Nearly-invisible clickable area */}
       <span style={{
         position: 'absolute', inset: 0, borderRadius: 6, display: 'block',
         backgroundColor: hovered ? 'rgba(255,255,255,0.10)' : 'transparent',
         transition: 'background-color 0.15s',
       }} />
 
-      {/* Anchor dot + floating label — centered, counter-scaled */}
+      {/* Anchor dot + floating label — counter-scaled to stay constant size */}
       <span style={{
         position: 'absolute', left: '50%', top: '50%',
         transform: `translate(-50%, -50%) scale(${inv})`,
@@ -64,7 +64,7 @@ function HotspotAnchor({ hotspot, left, top, width, height, zoom, onClick }) {
           }} />
         </span>
 
-        {/* Floating label card */}
+        {/* Label card */}
         <span style={{
           display: 'flex', flexDirection: 'column',
           background: 'rgba(255,255,255,0.96)',
@@ -100,46 +100,36 @@ export function PanoramaViewer({ storeId }) {
   const [pan, setPan]             = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
 
-  // Refs so event handlers always see latest values without stale closures
-  const panRef    = useRef({ x: 0, y: 0 });
-  const zoomRef   = useRef(1);
-  const coverRef  = useRef({ w: 0, h: 0 });
-  const stageRef2 = useRef({ w: 0, h: 0 });
-  const ptr       = useRef({ down: false, movedEnough: false, onHotspot: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
-  const pinch     = useRef({ active: false, startDist: 0, startZoom: 1 });
+  const panRef  = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(1);
+  const ptr     = useRef({ down: false, movedEnough: false, onHotspot: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
+  const pinch   = useRef({ active: false, startDist: 0, startZoom: 1 });
+
+  // Keep refs in sync so event handlers don't stale-close over state
+  const stageSizeRef = useRef({ w: 0, h: 0 });
+  const coverRef     = useRef({ w: 0, h: 0 });
 
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  // Keep refs in sync
   useEffect(() => { panRef.current = pan; }, [pan]);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { stageSizeRef.current = stageSize; }, [stageSize]);
 
-  // Cover dimensions derived from natural image size + stage size
-  const coverScale =
-    natural.w && natural.h && stageSize.w && stageSize.h
-      ? Math.max(stageSize.w / natural.w, stageSize.h / natural.h)
-      : 1;
-  const coverW = natural.w * coverScale;
-  const coverH = natural.h * coverScale;
-
-  useEffect(() => { coverRef.current = { w: coverW, h: coverH }; }, [coverW, coverH]);
-  useEffect(() => { stageRef2.current = stageSize; }, [stageSize]);
-
-  // Measure stage
-  const measureStage = useCallback(() => {
-    if (stageRef.current) {
-      const s = { w: stageRef.current.clientWidth, h: stageRef.current.clientHeight };
-      setStageSize(s);
-      stageRef2.current = s;
-    }
-  }, []);
-
+  // ResizeObserver — always reflects real rendered stage size
   useEffect(() => {
-    measureStage();
-    window.addEventListener('resize', measureStage);
-    return () => window.removeEventListener('resize', measureStage);
-  }, [measureStage]);
+    const el = stageRef.current;
+    if (!el) return;
+    const update = () => {
+      const s = { w: el.clientWidth, h: el.clientHeight };
+      setStageSize(s);
+      stageSizeRef.current = s;
+    };
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    update(); // initial
+    return () => ro.disconnect();
+  }, []); // run once; ResizeObserver handles all future changes
 
   // Load store
   useEffect(() => {
@@ -150,49 +140,50 @@ export function PanoramaViewer({ storeId }) {
       .finally(() => setLoading(false));
   }, [storeId]);
 
-  // Clamp pan — pan is in SCREEN pixels (applied outside the zoom layer)
-  // so the clamp is: half of the zoomed overflow in each axis.
-  const clampPan = useCallback((x, y, z, cov, stage) => {
-    const maxX = Math.max(0, (cov.w * z - stage.w) / 2);
-    const maxY = Math.max(0, (cov.h * z - stage.h) / 2);
+  // Cover dimensions — recomputed on every render when inputs change
+  const coverScale =
+    natural.w && natural.h && stageSize.w && stageSize.h
+      ? Math.max(stageSize.w / natural.w, stageSize.h / natural.h)
+      : 0;
+  const coverW = natural.w * coverScale;
+  const coverH = natural.h * coverScale;
+
+  useEffect(() => { coverRef.current = { w: coverW, h: coverH }; }, [coverW, coverH]);
+
+  // Clamp helper — pan in screen pixels, layer = cover×zoom
+  const clamp = useCallback((x, y, z, cov, stage) => {
+    const layerW = cov.w * z;
+    const layerH = cov.h * z;
+    const maxX = Math.max(0, (layerW - stage.w) / 2);
+    const maxY = Math.max(0, (layerH - stage.h) / 2);
     return {
       x: Math.max(-maxX, Math.min(maxX, x)),
       y: Math.max(-maxY, Math.min(maxY, y)),
     };
   }, []);
 
-  const canPan = useCallback((z, cov, stage) => {
-    const maxX = Math.max(0, (cov.w * z - stage.w) / 2);
-    const maxY = Math.max(0, (cov.h * z - stage.h) / 2);
-    return maxX > 0 || maxY > 0;
-  }, []);
-
-  // Re-clamp whenever zoom, stage or cover dimensions change
+  // Re-clamp pan whenever zoom or cover/stage dimensions change
   useEffect(() => {
     if (!coverW || !coverH || !stageSize.w || !stageSize.h) return;
     setPan((p) => {
-      const c = clampPan(p.x, p.y, zoom, { w: coverW, h: coverH }, stageSize);
+      const c = clamp(p.x, p.y, zoom, { w: coverW, h: coverH }, stageSize);
       panRef.current = c;
       return c;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zoom, stageSize.w, stageSize.h, coverW, coverH]);
 
-  // Non-passive wheel
+  // Non-passive wheel zoom
   const handleWheel = useCallback((e) => {
     e.preventDefault();
     const delta = -e.deltaY * 0.0015;
-    setZoom((z) => {
-      const nz = Math.min(4, Math.max(1, z + delta));
-      zoomRef.current = nz;
-      setPan((p) => {
-        const c = clampPan(p.x, p.y, nz, coverRef.current, stageRef2.current);
-        panRef.current = c;
-        return c;
-      });
-      return nz;
-    });
-  }, [clampPan]);
+    const nz = Math.min(4, Math.max(1, zoomRef.current + delta));
+    setZoom(nz);
+    zoomRef.current = nz;
+    const c = clamp(panRef.current.x, panRef.current.y, nz, coverRef.current, stageSizeRef.current);
+    setPan(c);
+    panRef.current = c;
+  }, [clamp]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -210,7 +201,12 @@ export function PanoramaViewer({ storeId }) {
 
   const handleMouseMove = (e) => {
     if (!ptr.current.down || ptr.current.onHotspot) return;
-    if (!canPan(zoomRef.current, coverRef.current, stageRef2.current)) return;
+    const cov = coverRef.current;
+    const stage = stageSizeRef.current;
+    const z = zoomRef.current;
+    const maxX = Math.max(0, (cov.w * z - stage.w) / 2);
+    const maxY = Math.max(0, (cov.h * z - stage.h) / 2);
+    if (maxX === 0 && maxY === 0) return;
     const dx = e.clientX - ptr.current.startX;
     const dy = e.clientY - ptr.current.startY;
     if (!ptr.current.movedEnough && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
@@ -218,7 +214,10 @@ export function PanoramaViewer({ storeId }) {
       setIsPanning(true);
     }
     if (ptr.current.movedEnough) {
-      const c = clampPan(ptr.current.startPanX + dx, ptr.current.startPanY + dy, zoomRef.current, coverRef.current, stageRef2.current);
+      const c = {
+        x: Math.max(-maxX, Math.min(maxX, ptr.current.startPanX + dx)),
+        y: Math.max(-maxY, Math.min(maxY, ptr.current.startPanY + dy)),
+      };
       setPan(c);
       panRef.current = c;
     }
@@ -247,21 +246,27 @@ export function PanoramaViewer({ storeId }) {
       const nz = Math.min(4, Math.max(1, pinch.current.startZoom * ratio));
       setZoom(nz);
       zoomRef.current = nz;
-      setPan((p) => {
-        const c = clampPan(p.x, p.y, nz, coverRef.current, stageRef2.current);
-        panRef.current = c;
-        return c;
-      });
+      const c = clamp(panRef.current.x, panRef.current.y, nz, coverRef.current, stageSizeRef.current);
+      setPan(c);
+      panRef.current = c;
       return;
     }
     if (!ptr.current.down || ptr.current.onHotspot) return;
-    if (!canPan(zoomRef.current, coverRef.current, stageRef2.current)) return;
+    const cov = coverRef.current;
+    const stage = stageSizeRef.current;
+    const z = zoomRef.current;
+    const maxX = Math.max(0, (cov.w * z - stage.w) / 2);
+    const maxY = Math.max(0, (cov.h * z - stage.h) / 2);
+    if (maxX === 0 && maxY === 0) return;
     const t = e.touches[0];
     const dx = t.clientX - ptr.current.startX;
     const dy = t.clientY - ptr.current.startY;
     if (!ptr.current.movedEnough && Math.hypot(dx, dy) > DRAG_THRESHOLD) { ptr.current.movedEnough = true; setIsPanning(true); }
     if (ptr.current.movedEnough) {
-      const c = clampPan(ptr.current.startPanX + dx, ptr.current.startPanY + dy, zoomRef.current, coverRef.current, stageRef2.current);
+      const c = {
+        x: Math.max(-maxX, Math.min(maxX, ptr.current.startPanX + dx)),
+        y: Math.max(-maxY, Math.min(maxY, ptr.current.startPanY + dy)),
+      };
       setPan(c);
       panRef.current = c;
     }
@@ -274,16 +279,12 @@ export function PanoramaViewer({ storeId }) {
   };
 
   const adjustZoom = (delta) => {
-    setZoom((z) => {
-      const nz = Math.min(4, Math.max(1, parseFloat((z + delta).toFixed(2))));
-      zoomRef.current = nz;
-      setPan((p) => {
-        const c = clampPan(p.x, p.y, nz, coverRef.current, stageRef2.current);
-        panRef.current = c;
-        return c;
-      });
-      return nz;
-    });
+    const nz = Math.min(4, Math.max(1, parseFloat((zoomRef.current + delta).toFixed(2))));
+    setZoom(nz);
+    zoomRef.current = nz;
+    const c = clamp(panRef.current.x, panRef.current.y, nz, coverRef.current, stageSizeRef.current);
+    setPan(c);
+    panRef.current = c;
   };
 
   const resetView = () => {
@@ -304,13 +305,23 @@ export function PanoramaViewer({ storeId }) {
   }
 
   const shopLabel = user?.shop?.name || (user?.role === 'DEVELOPER' ? 'Developer' : '');
-  const panning = canPan(zoom, { w: coverW, h: coverH }, stageSize);
+
+  // Compute layer geometry at render time — the source of truth for positioning
+  const layerW = coverW * zoom;
+  const layerH = coverH * zoom;
+  const maxX   = coverW > 0 ? Math.max(0, (layerW - stageSize.w) / 2) : 0;
+  const maxY   = coverH > 0 ? Math.max(0, (layerH - stageSize.h) / 2) : 0;
+  const px     = Math.max(-maxX, Math.min(maxX, pan.x));
+  const py     = Math.max(-maxY, Math.min(maxY, pan.y));
+  const layerL = (stageSize.w - layerW) / 2 + px;
+  const layerT = (stageSize.h - layerH) / 2 + py;
+  const canPan = maxX > 0 || maxY > 0;
 
   return (
     <div style={{ position: 'fixed', inset: 0, display: 'flex', flexDirection: 'column', background: '#111827' }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes ping  { 0% { transform: scale(1); opacity: 0.5; } 75%, 100% { transform: scale(2); opacity: 0; } }
+        @keyframes ping { 0% { transform: scale(1); opacity: 0.5; } 75%, 100% { transform: scale(2); opacity: 0; } }
       `}</style>
 
       {/* Header */}
@@ -364,7 +375,7 @@ export function PanoramaViewer({ storeId }) {
         style={{
           flex: 1, overflow: 'hidden', position: 'relative',
           background: '#111827',
-          cursor: panning ? (isPanning ? 'grabbing' : 'grab') : 'default',
+          cursor: canPan ? (isPanning ? 'grabbing' : 'grab') : 'default',
           touchAction: 'none', userSelect: 'none',
         }}
         onMouseDown={handleMouseDown}
@@ -377,7 +388,7 @@ export function PanoramaViewer({ storeId }) {
       >
         {store?.imageUrl ? (
           <>
-            {/* Hidden probe img — gets natural dimensions */}
+            {/* Hidden probe to get naturalWidth/Height */}
             <img
               src={store.imageUrl}
               alt=""
@@ -385,48 +396,38 @@ export function PanoramaViewer({ storeId }) {
               style={{ display: 'none' }}
             />
 
-            {coverW > 0 && (
-              // Outer: pan in screen pixels (no scale applied here)
+            {/* Image layer — sized cover×zoom, positioned by left/top in screen pixels */}
+            {layerW > 0 && (
               <div
                 style={{
                   position: 'absolute',
-                  top: '50%', left: '50%',
-                  width: 0, height: 0,          // zero-size anchor; children use their own size
-                  transform: `translate(${pan.x}px, ${pan.y}px)`,
-                  transition: isPanning ? 'none' : 'transform 0.08s ease-out',
-                  willChange: 'transform',
+                  left: layerL,
+                  top: layerT,
+                  width: layerW,
+                  height: layerH,
+                  backgroundImage: `url(${store.imageUrl})`,
+                  backgroundSize: '100% 100%',
+                  backgroundRepeat: 'no-repeat',
+                  transition: isPanning ? 'none' : 'left 0.06s ease-out, top 0.06s ease-out',
+                  willChange: 'left, top',
                 }}
               >
-                {/* Inner: zoom only, centered on the anchor */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 0, left: 0,
-                    width: coverW, height: coverH,
-                    transform: `translate(-50%, -50%) scale(${zoom})`,
-                    transformOrigin: 'center center',
-                    backgroundImage: `url(${store.imageUrl})`,
-                    backgroundSize: '100% 100%',
-                    backgroundRepeat: 'no-repeat',
-                  }}
-                >
-                  {/* Hotspot anchors */}
-                  {hotspots.map((h) => (
-                    <HotspotAnchor
-                      key={h.id}
-                      hotspot={h}
-                      left={h.x * coverW}
-                      top={h.y * coverH}
-                      width={h.w * coverW}
-                      height={h.h * coverH}
-                      zoom={zoom}
-                      onClick={() => {
-                        if (ptr.current.movedEnough) return;
-                        navigate(`/module/${h.module}`);
-                      }}
-                    />
-                  ))}
-                </div>
+                {/* Hotspots — positioned in layerW×layerH space */}
+                {hotspots.map((h) => (
+                  <HotspotAnchor
+                    key={h.id}
+                    hotspot={h}
+                    left={h.x * layerW}
+                    top={h.y * layerH}
+                    width={h.w * layerW}
+                    height={h.h * layerH}
+                    zoom={zoom}
+                    onClick={() => {
+                      if (ptr.current.movedEnough) return;
+                      navigate(`/module/${h.module}`);
+                    }}
+                  />
+                ))}
               </div>
             )}
 
